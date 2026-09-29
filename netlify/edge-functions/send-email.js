@@ -45,6 +45,8 @@ const FROM_EMAIL = 'Insight Analytics <noreply@insight-analytics.ca>';
 const TO_EMAIL = 'dev@insight-analytics.ca';
 
 const ALLOWED_ORIGINS = [
+  'https://insight-analytics.ca',
+  'https://www.insight-analytics.ca',
   'https://insightanalyticsca.github.io',
   'http://localhost:3000',
   'http://127.0.0.1:3000',

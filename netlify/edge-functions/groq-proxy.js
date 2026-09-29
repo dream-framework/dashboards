@@ -23,6 +23,8 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000;  // 24 hours
 const VERIFY_MAX_TOKENS = 5;
 
 const ALLOWED_ORIGINS = [
+  'https://insight-analytics.ca',
+  'https://www.insight-analytics.ca',
   'https://insightanalyticsca.github.io',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
