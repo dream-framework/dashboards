@@ -42,3 +42,5 @@
 [[edge_functions]]
   function = "send-email"
   path = "/send-email"
+
+# Last updated: trigger rebuild for send-email edge function registration
