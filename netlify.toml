@@ -38,3 +38,7 @@
 [[edge_functions]]
   function = "groq-proxy"
   path = "/groq-proxy"
+
+[[edge_functions]]
+  function = "send-email"
+  path = "/send-email"
