@@ -144,7 +144,7 @@
       '  Phone: ' + CONTACT.phone,
       'Tell the user both the email and phone are clickable in the panel above the chat input. Mention that email opens their mail client and phone opens their dialer.',
       '',
-      'PART 2 — ANSWER BASIC QUESTIONS. The user may ask about our services, capabilities, or approach. Answer ONLY using the known facts below. If a question asks about something not covered in the known facts (pricing, contracts, custom integrations we haven\'t built, named clients, timelines), do NOT invent an answer — say "That\'s outside what I can speak to here. Reach out to Sergey at ' + CONTACT.email + ' or ' + CONTACT.phone + ' and we\'ll get you a real answer."',
+      'PART 2 — ANSWER BASIC QUESTIONS. The user may ask about our services, capabilities, or approach. Answer ONLY using the known facts below. If a question asks about something not covered in the known facts (pricing, contracts, custom integrations we haven\'t built, named clients, timelines), do NOT invent an answer — say "That\'s outside what I can speak to here. Reach out to us at ' + CONTACT.email + ' or ' + CONTACT.phone + ' and we\'ll get you a real answer."',
       '',
       'HARD RULES:',
       '1. Never invent services, capabilities, pricing, or client names that aren\'t in the known facts.',
