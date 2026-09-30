@@ -32,7 +32,7 @@
     'Source repo: github.com/insightanalyticsca/dashboards',
 
     '═══ DASHBOARD SECTORS ═══',
-    'Executive dashboards: 6 versions — AR portfolio, customer payments, disconnects/bankruptcies, e-bill performance, final-bill recovery, and Chatters (executive operating dashboard for a 116-store beauty retail + salon chain).',
+    'Executive dashboards: 6 versions — AR portfolio, customer payments, disconnects/bankruptcies, e-bill performance, final-bill recovery, and the Executive Operating Dashboard (multi-location retail + services chain — revenue mix, capacity heatmap, store performance).',
     'CSR (Customer Service Representative) dashboards: 11 canvas versions — aging overview, aging dynamics, AR tabular, electric arrears, top arrears, bankruptcies report, collection emails, monthly moves, multi-unit conditions map, queue spectrum, request service layout map.',
     'ITS (IT Service) dashboards: 6 canvas versions — service health, security posture, security training, SLA performance, ticket management, ticket operations.',
     'Custom HTML visuals: 45+ individual visual files cloned verbatim from the .NET app (no patches except fetch URL rewrites), combined into 23 canvas/executive versions.',
@@ -40,7 +40,7 @@
     '═══ AI INTEGRATION (multiple Groq-powered bots) ═══',
     'AI Brief card: a dazzling 4-section card on each executive dashboard page. On page load, fetches the dashboard JSON, calls Groq with an honest 4-part system prompt, and streams tokens live into the 4 cells (What happened / Why / What to expect / What to do) with shimmer state.',
     'Visual chat: floating chat widget on every version page. Answers questions about the dashboard\'s JSON data using the same honest 4-part brief format. Includes an "AI-wired" badge with a green pulse dot.',
-    'Contact bot: footer-resident widget on the Chatters page. Conveys contact info (email + phone, clickable mailto:/tel:) and answers basic questions about Insight Analytics\' solutions. Inline compact form by default — tiny icons + Ask pill + close — collapses to a single Contact pill.',
+    'Contact bot: footer-resident widget on the Executive Operating Dashboard page. Conveys contact info (email + phone, clickable mailto:/tel:) and answers basic questions about Insight Analytics\' solutions. Inline compact form by default — tiny icons + Ask pill + close — collapses to a single Contact pill.',
     'Honest status pill: lander page topbar pill that actually pings Groq with a real API call (max_tokens=1) to verify the key works. Shows green "Groq · live" only on HTTP 200, amber "Groq · checking…" during verification, red "Groq · offline" on 401/403/network error. 5-minute in-memory cache to avoid pinging on every page nav.',
 
     '═══ HONEST AI PRINCIPLES ═══',
@@ -73,7 +73,7 @@
 
     '═══ DEMO CONTENT (not real client data) ═══',
     'All dashboard data is synthetic demo data — real customer data is never shipped to the browser.',
-    'Chatters executive dashboard uses a realistic operating model for a 116-store beauty retail + salon chain ($309M TTM revenue, $2.66M/store, $61.80/visit, 60/40 retail/services split) — derived from public benchmarks, not real client financials.',
+    'The Executive Operating Dashboard uses a realistic operating model for a multi-location retail + services chain — revenue mix, capacity utilization, store performance matrix, and a 4-week revenue forecast. All numbers are illustrative demo data, not real client financials.',
     'Period labels are real "today" — Week 32 / Aug 2026 — so the demo doesn\'t look stale.',
     'Use cases demonstrated: AR portfolio, payments, disconnects, e-bill performance, final-bill recovery, CSR aging overview, IT service health, security posture, ticket operations, SLA performance.',
 
