@@ -26,10 +26,10 @@
   var IA_FACTS = [
     '═══ CORE PLATFORM ═══',
     'Insight Analytics builds corporate dashboard platforms for utilities, telecom, and operations sectors.',
-    'Core product: a static site (HTML5 + vanilla JS + ECharts 5) deployed on GitHub Pages at insightanalyticsca.github.io/dashboards/ — free hosting, no server required.',
+    'Core product: a static site (HTML5 + vanilla JS + ECharts 5) — free hosting, no server required.',
     'Original platform was a .NET MVC Core app; the deployed demo is a faithful static clone of that app\'s logic, look, and feel (not a reimplementation — the .NET cshtml templates were converted to static HTML shells that load shared JS).',
     'JSON file backend: data/executive/*.json + data/versions/*.json. No database, no API server — every "query" is a fetch against a static JSON file.',
-    'Source repo: github.com/insightanalyticsca/dashboards',
+    'Source repo: not publicly disclosed',
 
     '═══ DASHBOARD SECTORS ═══',
     'Executive dashboards: 6 versions — AR portfolio, customer payments, disconnects/bankruptcies, e-bill performance, final-bill recovery, and the Executive Operating Dashboard (multi-location retail + services chain — revenue mix, capacity heatmap, store performance).',
