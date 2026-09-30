@@ -7,7 +7,7 @@ Task: Move contact bot to the right side of the page (same line as IA logo in fo
 Work Log:
 - Restructured contact-chat.js: removed floating launcher + auto-hint bubble, replaced with inline compact widget in the footer (right of IA brand mark, same line)
 - Compact widget (visible by default on page load, data-state="open"):
-  - Tiny mail icon button → mailto:sergey.gurov@insight-analytics.ca (violet gradient)
+  - Tiny mail icon button → mailto:dev@insight-analytics.ca (violet gradient)
   - Tiny phone icon button → tel:+12896359915 (teal gradient)
   - Ask pill (gradient) → opens the full floating chat panel (positioned bottom-right)
   - X close button → collapses compact to a single Contact pill

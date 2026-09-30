@@ -365,7 +365,7 @@
     var msg = "I'm the visual chat for this dashboard — I answer questions about the data on this page (KPIs, charts, trends).\n\n" +
       "For platform-level questions about Insight Analytics (the 8-step methodology, PWA features, Netlify proxy, theming, etc.), open the **Contact bot** in the footer — it has the full knowledge base of all implemented solutions.\n\n" +
       "Or reach out directly:\n" +
-      "  • Email: sergey.gurov@insight-analytics.ca\n" +
+      "  • Email: dev@insight-analytics.ca\n" +
       "  • Phone: (289) 635-9915";
     if (onToken) {
       var tokens = msg.match(/\S+\s*/g) || [msg];

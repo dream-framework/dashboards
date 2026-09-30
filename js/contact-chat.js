@@ -11,7 +11,7 @@
 
   // ─── Contact facts (single source of truth) ──────────────────────────────
   var CONTACT = {
-    email: 'sergey.gurov@insight-analytics.ca',
+    email: 'dev@insight-analytics.ca',
     phone: '(289) 635-9915',
     phoneTel: '+12896359915',
     brand: 'Insight Analytics',
