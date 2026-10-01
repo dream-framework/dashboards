@@ -52,20 +52,29 @@ const memCache = new Map();
 // ─── Persistent visit log via netlify:blobs (shared across all edges) ──────
 // The in-memory visitLog is per-instance and lost when the edge recycles.
 // netlify:blobs provides persistent, shared storage that survives edge
-// restarts. We try to import it dynamically — if it fails (local dev),
-// we fall back to in-memory only.
+// restarts. We initialize it lazily (inside an async function) because
+// top-level await is not supported by Netlify's CJS bundler.
 let visitStore = null;
-try {
-  const blobs = await import('netlify:blobs');
-  visitStore = blobs.getStore('visit-stats');
-} catch (e) {
-  // netlify:blobs not available — in-memory only (same as before)
-}
+let visitStoreInitDone = false;
 const VISIT_RETENTION_MS = 72 * 60 * 60 * 1000; // 72 hours
 const MAX_VISITS_BLOB = 2000; // cap blob size
 let visitBlobWritesPending = 0;
 
+async function ensureVisitStore() {
+  if (visitStoreInitDone) return visitStore;
+  visitStoreInitDone = true;
+  try {
+    const blobs = await import('netlify:blobs');
+    visitStore = blobs.getStore('visit-stats');
+  } catch (e) {
+    // netlify:blobs not available — in-memory only (same as before)
+    visitStore = null;
+  }
+  return visitStore;
+}
+
 async function readVisitLogBlob() {
+  await ensureVisitStore();
   if (!visitStore) return [];
   try {
     const data = await visitStore.get('visits-72h');
@@ -81,6 +90,7 @@ async function readVisitLogBlob() {
 }
 
 async function writeVisitLogBlob(newVisits) {
+  await ensureVisitStore();
   if (!visitStore || newVisits.length === 0) return;
   try {
     // Read existing blob visits, merge with new, dedupe, trim, write back
