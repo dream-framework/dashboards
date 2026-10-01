@@ -49,6 +49,61 @@ function corsHeaders(origin) {
 // a single edge — most users in the same region hit the same instance.
 const memCache = new Map();
 
+// ─── Persistent visit log via netlify:blobs (shared across all edges) ──────
+// The in-memory visitLog is per-instance and lost when the edge recycles.
+// netlify:blobs provides persistent, shared storage that survives edge
+// restarts. We try to import it dynamically — if it fails (local dev),
+// we fall back to in-memory only.
+let visitStore = null;
+try {
+  const blobs = await import('netlify:blobs');
+  visitStore = blobs.getStore('visit-stats');
+} catch (e) {
+  // netlify:blobs not available — in-memory only (same as before)
+}
+const VISIT_RETENTION_MS = 72 * 60 * 60 * 1000; // 72 hours
+const MAX_VISITS_BLOB = 2000; // cap blob size
+let visitBlobWritesPending = 0;
+
+async function readVisitLogBlob() {
+  if (!visitStore) return [];
+  try {
+    const data = await visitStore.get('visits-72h');
+    if (!data) return [];
+    const visits = JSON.parse(data);
+    if (!Array.isArray(visits)) return [];
+    // Filter by 72-hour retention
+    const cutoff = Date.now() - VISIT_RETENTION_MS;
+    return visits.filter(v => new Date(v.ts).getTime() > cutoff);
+  } catch (e) {
+    return [];
+  }
+}
+
+async function writeVisitLogBlob(newVisits) {
+  if (!visitStore || newVisits.length === 0) return;
+  try {
+    // Read existing blob visits, merge with new, dedupe, trim, write back
+    const existing = await readVisitLogBlob();
+    const merged = [...existing, ...newVisits];
+    // Deduplicate by ts + ip
+    const seen = new Set();
+    const deduped = merged.filter(v => {
+      const key = v.ts + '|' + v.ip;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    // Sort newest first
+    deduped.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+    // Trim to max
+    const trimmed = deduped.slice(0, MAX_VISITS_BLOB);
+    await visitStore.set('visits-72h', JSON.stringify(trimmed));
+  } catch (e) {
+    // silent — don't break the edge function
+  }
+}
+
 // ─── Visit logging + persistent cumulative stats ───────────────────────────
 const visitLog = [];
 const MAX_VISITS = 500;
@@ -126,6 +181,15 @@ function logVisit(request, context) {
   if (blobWritesPending >= 5 && blobLoaded) {
     blobWritesPending = 0;
     writeCumulative();
+  }
+
+  // Also flush the visit log to the persistent blob every 5 visits
+  visitBlobWritesPending++;
+  if (visitBlobWritesPending >= 5) {
+    visitBlobWritesPending = 0;
+    // Flush the last 10 in-memory visits to the blob
+    const recent = visitLog.slice(-10);
+    writeVisitLogBlob(recent);
   }
   return visit;
 }
@@ -323,11 +387,33 @@ export default async (request, context) => {
         blobWritesPending = 0;
         writeCumulative();
       }
-      // Return visits newest-first + cumulative stats from persistent blob
-      const visits = [...visitLog].reverse();
+      // Also flush any pending visit log entries to the blob
+      if (visitBlobWritesPending > 0) {
+        visitBlobWritesPending = 0;
+        await writeVisitLogBlob(visitLog.slice(-10));
+      }
+      // Read persistent visits from blob (survives edge restarts, 72h retention)
+      const blobVisits = await readVisitLogBlob();
+      // Merge blob visits with in-memory visits (current instance, not yet flushed)
+      const merged = [...blobVisits, ...visitLog];
+      // Deduplicate by ts + ip
+      const seen = new Set();
+      const deduped = merged.filter(v => {
+        const key = v.ts + '|' + v.ip;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      // Filter by 72-hour retention
+      const cutoff = Date.now() - VISIT_RETENTION_MS;
+      const recent72h = deduped.filter(v => new Date(v.ts).getTime() > cutoff);
+      // Sort newest first
+      recent72h.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
       return new Response(JSON.stringify({
-        count: visits.length,
-        visits,
+        count: recent72h.length,
+        visits: recent72h,
+        retentionHours: 72,
+        source: visitStore ? 'netlify:blobs (persistent)' : 'in-memory (per-instance)',
         cumulative: {
           totalVisits: cumulative.totalVisits || 0,
           distinctIPs: Object.keys(cumulative.ips || {}).length,
