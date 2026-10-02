@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Metadata Discovery — Database Archaeology Demo</title>
+<meta name="description" content="Interactive database metadata discovery graph. Click objects to see dependencies, columns, and rule-engine findings.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0f172a;
+  --bg-elevated: #1e293b;
+  --surface: #1e293b;
+  --border: #334155;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --primary: #6366f1;
+  --accent: #06b6d4;
+  --green: #10b981;
+  --amber: #f59e0b;
+  --red: #ef4444;
+  --font-head: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-body); background: var(--bg); color: var(--text); overflow: hidden; height: 100vh; }
+.app { display: flex; flex-direction: column; height: 100vh; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 24px; background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+  z-index: 10; flex-shrink: 0;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark {
+  width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--primary), var(--accent)); color: #fff;
+  font-family: var(--font-head); font-weight: 800; font-size: 14px;
+  box-shadow: 0 4px 14px -4px rgba(99,102,241,0.5);
+}
+.brand-text { display: flex; flex-direction: column; }
+.brand-name { font-family: var(--font-head); font-size: 15px; font-weight: 700; color: var(--text); }
+.brand-sub { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.top-actions { display: flex; align-items: center; gap: 12px; }
+.filter-btns { display: flex; gap: 6px; }
+.filter-btn {
+  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 600;
+  font-family: var(--font-head); cursor: pointer; transition: all 180ms;
+}
+.filter-btn:hover { border-color: var(--accent); color: var(--text); }
+.filter-btn.active { background: linear-gradient(135deg, var(--primary), var(--accent)); color: #fff; border-color: transparent; }
+.search-box {
+  padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-size: 13px; width: 220px;
+  font-family: var(--font-body); outline: none; transition: border-color 180ms;
+}
+.search-box:focus { border-color: var(--accent); }
+.search-box::placeholder { color: var(--text-muted); }
+.main { display: flex; flex: 1; overflow: hidden; }
+#cy { flex: 1; background: var(--bg); }
+.inspector {
+  width: 380px; flex-shrink: 0; background: var(--bg-elevated);
+  border-left: 1px solid var(--border); overflow-y: auto;
+  transform: translateX(100%); transition: transform 280ms cubic-bezier(0.2,0.8,0.2,1);
+}
+.inspector.open { transform: translateX(0); }
+.inspector-header {
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.inspector-title { font-family: var(--font-head); font-size: 16px; font-weight: 700; }
+.inspector-close {
+  border: 0; background: transparent; color: var(--text-muted); cursor: pointer;
+  font-size: 18px; padding: 4px 8px; border-radius: 6px; transition: all 150ms;
+}
+.inspector-close:hover { background: var(--surface); color: var(--text); }
+.inspector-body { padding: 20px; }
+.inspector-section { margin-bottom: 24px; }
+.inspector-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-muted); margin-bottom: 8px;
+}
+.inspector-value { font-size: 14px; color: var(--text); line-height: 1.6; }
+.inspector-value code {
+  font-family: 'Courier New', monospace; font-size: 12px; background: var(--bg);
+  padding: 2px 6px; border-radius: 4px; color: var(--accent);
+}
+.badge {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.badge.table { background: rgba(99,102,241,0.15); color: #818cf8; }
+.badge.view { background: rgba(139,92,246,0.15); color: #a78bfa; }
+.badge.proc { background: rgba(16,185,129,0.15); color: #34d399; }
+.finding {
+  padding: 12px 14px; border-radius: 10px; margin-bottom: 8px;
+  border-left: 3px solid var(--amber); background: rgba(245,158,11,0.05);
+}
+.finding.severity-high { border-left-color: var(--red); background: rgba(239,68,68,0.05); }
+.finding.severity-info { border-left-color: var(--accent); background: rgba(6,182,212,0.05); }
+.finding-rule { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+.finding-msg { font-size: 13px; color: var(--text); line-height: 1.5; }
+.col-list { display: flex; flex-direction: column; gap: 4px; }
+.col-row {
+  display: flex; align-items: center; gap: 8px; padding: 4px 0;
+  font-size: 12px; font-family: 'Courier New', monospace;
+}
+.col-row .col-name { color: var(--text); flex: 1; }
+.col-row .col-type { color: var(--text-muted); font-size: 11px; }
+.col-row .col-null { font-size: 9px; color: var(--amber); }
+.col-row .col-key { font-size: 9px; color: var(--green); font-weight: 700; }
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; color: var(--text-muted); gap: 12px;
+}
+.empty-state .icon { font-size: 32px; opacity: 0.3; }
+.empty-state p { font-size: 14px; text-align: center; max-width: 240px; line-height: 1.5; }
+.findings-bar {
+  padding: 8px 20px; background: var(--bg-elevated); border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 16px; flex-shrink: 0;
+}
+.findings-count { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+.findings-count b { color: var(--amber); }
+@media (max-width: 768px) {
+  .inspector { width: 100%; position: absolute; z-index: 20; height: 100%; }
+  .search-box { width: 140px; }
+  .filter-btns { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">IA</div>
+      <div class="brand-text">
+        <div class="brand-name">Metadata Discovery</div>
+        <div class="brand-sub">Database Archaeology Demo</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div class="filter-btns">
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="table">Tables</button>
+        <button class="filter-btn" data-filter="view">Views</button>
+        <button class="filter-btn" data-filter="proc">Procs</button>
+      </div>
+      <input class="search-box" type="text" placeholder="Search objects…" id="search">
+    </div>
+  </div>
+  <div class="main">
+    <div id="cy"></div>
+    <div class="inspector" id="inspector">
+      <div class="inspector-header">
+        <div class="inspector-title" id="insp-title">Inspector</div>
+        <button class="inspector-close" id="insp-close">✕</button>
+      </div>
+      <div class="inspector-body" id="insp-body">
+        <div class="empty-state">
+          <div class="icon">🔍</div>
+          <p>Click any object in the graph to inspect its dependencies, columns, and findings.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="findings-bar">
+    <span class="findings-count"><b id="findings-count">0</b> findings across <b id="objects-count">0</b> objects</span>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+<script>
+const NODES = [
+  {id:'customers',label:'customers',type:'table',schema:'dbo',rows:12450,cols:[
+    {n:'customer_id',t:'int',k:'PK',null:'NOT NULL'},{n:'name',t:'varchar(100)',null:'NOT NULL'},
+    {n:'email',t:'varchar(255)',null:'NULL'},{n:'status',t:'char(1)',null:'NOT NULL'},
+    {n:'created_at',t:'datetime',null:'NOT NULL'}]},
+  {id:'accounts',label:'accounts',type:'table',schema:'dbo',rows:18920,cols:[
+    {n:'account_id',t:'int',k:'PK',null:'NOT NULL'},{n:'customer_id',t:'int',k:'FK',null:'NOT NULL'},
+    {n:'balance',t:'decimal(12,2)',null:'NOT NULL'},{n:'status',t:'varchar(10)',null:'NOT NULL'},
+    {n:'type',t:'varchar(20)',null:'NOT NULL'}]},
+  {id:'transactions',label:'transactions',type:'table',schema:'dbo',rows:847291,cols:[
+    {n:'transaction_id',t:'bigint',k:'PK',null:'NOT NULL'},{n:'account_id',t:'int',k:'FK',null:'NOT NULL'},
+    {n:'amount',t:'decimal(12,2)',null:'NOT NULL'},{n:'status',t:'varchar(15)',null:'NOT NULL'},
+    {n:'created_at',t:'datetime',null:'NOT NULL'}]},
+  {id:'payments',label:'payments',type:'table',schema:'dbo',rows:52310,cols:[
+    {n:'payment_id',t:'int',k:'PK',null:'NOT NULL'},{n:'account_id',t:'int',k:'FK',null:'NOT NULL'},
+    {n:'amount',t:'decimal(12,2)',null:'NOT NULL'},{n:'method',t:'varchar(10)',null:'NOT NULL'},
+    {n:'created_at',t:'datetime',null:'NOT NULL'}]},
+  {id:'invoices',label:'invoices',type:'table',schema:'dbo',rows:31200,cols:[
+    {n:'invoice_id',t:'int',k:'PK',null:'NOT NULL'},{n:'account_id',t:'int',k:'FK',null:'NOT NULL'},
+    {n:'total',t:'decimal(12,2)',null:'NOT NULL'},{n:'status',t:'varchar(10)',null:'NOT NULL'},
+    {n:'due_date',t:'date',null:'NOT NULL'}]},
+  {id:'addresses',label:'addresses',type:'table',schema:'dbo',rows:13200,cols:[
+    {n:'address_id',t:'int',k:'PK',null:'NOT NULL'},{n:'customer_id',t:'int',k:'FK',null:'NOT NULL'},
+    {n:'street',t:'varchar(200)',null:'NOT NULL'},{n:'city',t:'varchar(100)',null:'NOT NULL'},
+    {n:'province',t:'char(2)',null:'NOT NULL'},{n:'postal_code',t:'varchar(10)',null:'NOT NULL'}]},
+  {id:'vw_customer_orders',label:'vw_customer_orders',type:'view',schema:'dbo',rows:null,cols:[
+    {n:'customer_id',t:'int'},{n:'name',t:'varchar(100)'},{n:'email',t:'varchar(255)'},
+    {n:'transaction_id',t:'bigint'},{n:'amount',t:'decimal(12,2)'},{n:'created_at',t:'datetime'}],
+    def:"SELECT * FROM customers c LEFT JOIN transactions t ON c.customer_id = t.account_id"},
+  {id:'vw_active_accounts',label:'vw_active_accounts',type:'view',schema:'dbo',rows:null,cols:[
+    {n:'account_id',t:'int'},{n:'customer_id',t:'int'},{n:'balance',t:'decimal(12,2)'},{n:'type',t:'varchar(20)'}],
+    def:"SELECT account_id, customer_id, balance, type FROM accounts WHERE status = 'A'"},
+  {id:'vw_monthly_revenue',label:'vw_monthly_revenue',type:'view',schema:'dbo',rows:null,cols:[
+    {n:'month',t:'date'},{n:'revenue',t:'decimal(15,2)'},{n:'tx_count',t:'int'}],
+    def:"SELECT DATEADD(month, DATEDIFF(month, 0, t.created_at), 0) AS month, SUM(t.amount) AS revenue, COUNT(*) AS tx_count FROM transactions t WHERE t.status = 'COMPLETE' GROUP BY DATEADD(month, DATEDIFF(month, 0, t.created_at), 0)"},
+  {id:'vw_payment_summary',label:'vw_payment_summary',type:'view',schema:'dbo',rows:null,cols:[
+    {n:'account_id',t:'int'},{n:'total_paid',t:'decimal(15,2)'},{n:'payment_count',t:'int'}],
+    def:"SELECT account_id, SUM(amount) AS total_paid, COUNT(*) AS payment_count FROM payments GROUP BY account_id"},
+  {id:'sp_monthly_revenue',label:'sp_monthly_revenue',type:'proc',schema:'dbo',rows:null,cols:[],
+    params:[{n:'@Month',t:'date'},{n:'@IncludeSettled',t:'bit'}],
+    def:"-- Returns monthly revenue\nSELECT * FROM vw_monthly_revenue WHERE month = @Month"},
+  {id:'sp_customer_search',label:'sp_customer_search',type:'proc',schema:'dbo',rows:null,cols:[],
+    params:[{n:'@Search',t:'varchar(100)'},{n:'@Status',t:'char(1)'}],
+    def:"SELECT customer_id, name, email FROM customers WHERE name LIKE '%' + @Search + '%' AND status = @Status"},
+  {id:'sp_payment_summary',label:'sp_payment_summary',type:'proc',schema:'dbo',rows:null,cols:[],
+    params:[{n:'@AccountID',t:'int'}],
+    def:"SELECT * FROM vw_payment_summary WHERE account_id = @AccountID"},
+  {id:'sp_invoice_aging',label:'sp_invoice_aging',type:'proc',schema:'dbo',rows:null,cols:[],
+    params:[{n:'@AsOfDate',t:'date'}],
+    def:"-- Returns all paid invoices\nSELECT * FROM invoices WHERE status = 'P' AND due_date < @AsOfDate"},
+];
+const EDGES = [
+  {s:'vw_customer_orders',t:'customers',l:'READS'},
+  {s:'vw_customer_orders',t:'transactions',l:'JOINS'},
+  {s:'vw_active_accounts',t:'accounts',l:'READS'},
+  {s:'vw_monthly_revenue',t:'transactions',l:'READS'},
+  {s:'vw_payment_summary',t:'payments',l:'READS'},
+  {s:'sp_monthly_revenue',t:'vw_monthly_revenue',l:'EXECUTES'},
+  {s:'sp_customer_search',t:'customers',l:'READS'},
+  {s:'sp_payment_summary',t:'vw_payment_summary',l:'EXECUTES'},
+  {s:'sp_invoice_aging',t:'invoices',l:'READS'},
+  {s:'accounts',t:'customers',l:'FK'},
+  {s:'transactions',t:'accounts',l:'FK'},
+  {s:'payments',t:'accounts',l:'FK'},
+  {s:'invoices',t:'accounts',l:'FK'},
+  {s:'addresses',t:'customers',l:'FK'},
+];
+const FINDINGS = [
+  {node:'vw_customer_orders',rule:'SELECT_STAR',severity:'high',msg:"SELECT * in persisted view — column list should be explicit to survive schema changes."},
+  {node:'vw_customer_orders',rule:'LEFT_JOIN_NO_FILTER',severity:'high',msg:"LEFT JOIN without WHERE filter — deleted customer records may appear in downstream reports."},
+  {node:'vw_active_accounts',rule:'ENUM_MISMATCH',severity:'high',msg:"View filters status = 'A'. Table also contains 'ACTIVE' — enum value mismatch suspicion."},
+  {node:'sp_monthly_revenue',rule:'UNUSED_PARAMETER',severity:'info',msg:"Parameter @IncludeSettled is declared but never referenced in the procedure body."},
+  {node:'sp_monthly_revenue',rule:'SELECT_STAR_PROC',severity:'info',msg:"SELECT * in stored procedure — column drift risk if underlying view changes."},
+  {node:'sp_invoice_aging',rule:'COMMENT_CODE_MISMATCH',severity:'high',msg:"Comment says 'Returns all paid invoices' but WHERE filters status = 'P'. The proc may exclude invoices with status = 'PAID'."},
+  {node:'vw_monthly_revenue',rule:'ENUM_NARROWING',severity:'info',msg:"View filters status = 'COMPLETE'. Source table also contains 'SETTLED' — revenue may be underreported."},
+];
+const typeColors = {table:'#6366f1',view:'#8b5cf6',proc:'#10b981'};
+const typeBgColors = {table:'rgba(99,102,241,0.08)',view:'rgba(139,92,246,0.08)',proc:'rgba(16,185,129,0.08)'};
+const cy = cytoscape({
+  container: document.getElementById('cy'),
+  elements: [
+    ...NODES.map(n => ({data:{id:n.id,label:n.label,type:n.type,...n}})),
+    ...EDGES.map(e => ({data:{id:`${e.s}-${e.t}-${e.l}`,source:e.s,target:e.t,label:e.l}}))
+  ],
+  style: [
+    {selector:'node',style:{'label':'data(label)','text-valign':'center','text-halign':'center','font-family':'Inter, sans-serif','font-size':'10px','font-weight':'600','color':'#e2e8f0','text-wrap':'wrap','text-max-width':'80px','shape':'round-rectangle','background-color':e=>typeBgColors[e.data('type')]||'rgba(100,116,139,0.08)','border-color':e=>typeColors[e.data('type')]||'#64748b','border-width':2,'width':80,'height':36,'padding':'8px','transition-property':'border-width, opacity, background-color','transition-duration':'200ms'}},
+    {selector:'node:selected',style:{'border-width':4,'background-color':e=>typeColors[e.data('type')]+'33'}},
+    {selector:'node.faded',style:{'opacity':0.2}},
+    {selector:'node.highlighted',style:{'border-width':3,'opacity':1}},
+    {selector:'edge',style:{'label':'data(label)','font-size':'8px','font-family':'Inter, sans-serif','color':'#64748b','text-rotation':'autorotate','text-background-color':'#0f172a','text-background-padding':'2px','width':1.5,'curve-style':'bezier','line-color':'#334155','target-arrow-color':'#334155','target-arrow-shape':'triangle','arrow-scale':0.8,'transition-property':'line-color, width, opacity','transition-duration':'200ms'}},
+    {selector:'edge.highlighted',style:{'line-color':'#06b6d4','target-arrow-color':'#06b6d4','width':2.5,'opacity':1}},
+    {selector:'edge.faded',style:{'opacity':0.1}},
+  ],
+  layout:{name:'cose',padding:40,animate:true,animationDuration:500,nodeRepulsion:8000,idealEdgeLength:120,edgeElasticity:200},
+  wheelSensitivity:0.2,
+});
+const inspector = document.getElementById('inspector');
+const inspBody = document.getElementById('insp-body');
+const inspTitle = document.getElementById('insp-title');
+const inspClose = document.getElementById('insp-close');
+function findNode(id){return NODES.find(n=>n.id===id);}
+function findEdges(id){return EDGES.filter(e=>e.s===id||e.t===id);}
+function findFindings(id){return FINDINGS.filter(f=>f.node===id);}
+function showInspector(id){
+  const node = findNode(id); if(!node) return;
+  const edges = findEdges(id); const findings = findFindings(id);
+  const deps = edges.filter(e=>e.s===id).map(e=>`${e.t} <span class="badge" style="font-size:8px;padding:2px 6px;background:rgba(6,182,212,0.1);color:#06b6d4">${e.l}</span>`).join('<br>');
+  const depsIn = edges.filter(e=>e.t===id).map(e=>`${e.s} <span class="badge" style="font-size:8px;padding:2px 6px;background:rgba(99,102,241,0.1);color:#818cf8">${e.l}</span>`).join('<br>');
+  let colHtml = '';
+  if(node.cols && node.cols.length){
+    colHtml = '<div class="col-list">'+node.cols.map(c=>`<div class="col-row"><span class="col-name">${c.n}</span><span class="col-type">${c.t}</span>${c.k?`<span class="col-key">${c.k}</span>`:''}${c.null?`<span class="col-null">${c.null}</span>`:''}</div>`).join('')+'</div>';
+  }
+  let paramHtml = '';
+  if(node.params && node.params.length){
+    paramHtml = '<div class="col-list">'+node.params.map(p=>`<div class="col-row"><span class="col-name">${p.n}</span><span class="col-type">${p.t}</span></div>`).join('')+'</div>';
+  }
+  let findingsHtml = findings.length ? findings.map(f=>{const sev=f.severity==='high'?'severity-high':f.severity==='info'?'severity-info':'';return `<div class="finding ${sev}"><div class="finding-rule">${f.rule.replace(/_/g,' ')}</div><div class="finding-msg">${f.msg}</div></div>`;}).join('') : '<p style="color:var(--text-muted);font-size:12px">No findings — this object passes all rules.</p>';
+  inspTitle.textContent = node.label;
+  inspBody.innerHTML = `<div class="inspector-section"><div class="inspector-label">Type</div><div class="inspector-value"><span class="badge ${node.type}">${node.type}</span> ${node.schema}.${node.label}</div></div>${node.rows?`<div class="inspector-section"><div class="inspector-label">Row Count</div><div class="inspector-value">${node.rows.toLocaleString()}</div></div>`:''}<div class="inspector-section"><div class="inspector-label">Depends On</div><div class="inspector-value">${deps||'<span style="color:var(--text-muted);font-size:12px">No outbound dependencies</span>'}</div></div><div class="inspector-section"><div class="inspector-label">Referenced By</div><div class="inspector-value">${depsIn||'<span style="color:var(--text-muted);font-size:12px">No inbound references</span>'}</div></div>${colHtml?`<div class="inspector-section"><div class="inspector-label">Columns (${node.cols.length})</div>${colHtml}</div>`:''}${paramHtml?`<div class="inspector-section"><div class="inspector-label">Parameters</div>${paramHtml}</div>`:''}${node.def?`<div class="inspector-section"><div class="inspector-label">Definition</div><div class="inspector-value"><code>${node.def.replace(/</g,'&lt;')}</code></div></div>`:''}<div class="inspector-section"><div class="inspector-label">Findings (${findings.length})</div>${findingsHtml}</div>`;
+  inspector.classList.add('open');
+  const neighborIds = new Set([id, ...edges.map(e=>e.s===id?e.t:e.s)]);
+  cy.nodes().forEach(n=>{if(neighborIds.has(n.id())){n.removeClass('faded');n.addClass('highlighted');}else{n.removeClass('highlighted');n.addClass('faded');}});
+  cy.edges().forEach(e=>{const connected = edges.some(edge=>e.id()===`${edge.s}-${edge.t}-${edge.l}`);if(connected){e.removeClass('faded');e.addClass('highlighted');}else{e.removeClass('highlighted');e.addClass('faded');}});
+}
+function resetHighlight(){cy.nodes().forEach(n=>{n.removeClass('faded');n.removeClass('highlighted');});cy.edges().forEach(e=>{e.removeClass('faded');e.removeClass('highlighted');});}
+cy.on('tap','node',function(evt){showInspector(evt.target.id());});
+cy.on('tap',function(evt){if(evt.target===cy){inspector.classList.remove('open');resetHighlight();}});
+inspClose.addEventListener('click',function(){inspector.classList.remove('open');resetHighlight();});
+document.getElementById('search').addEventListener('input',function(e){const q=e.target.value.toLowerCase().trim();if(!q){cy.nodes().forEach(n=>n.style({opacity:1}));return;}cy.nodes().forEach(n=>{n.style({opacity:n.data('label').toLowerCase().includes(q)?1:0.15});});});
+document.querySelectorAll('.filter-btn').forEach(btn=>{btn.addEventListener('click',function(){document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');const filter=this.dataset.filter;cy.nodes().forEach(n=>{n.style({opacity:(filter==='all'||n.data('type')===filter)?1:0.1});});});});
+document.getElementById('findings-count').textContent = FINDINGS.length;
+document.getElementById('objects-count').textContent = NODES.length;
+</script>
+</body>
+</html>
