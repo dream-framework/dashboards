@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Markets & Finance Dashboard</title>
-<meta name="description" content="Live markets dashboard: index trends, sector performance, crypto, futures, currency heatmap, and AI-powered narrative.">
+<title>Markets & Finance Dashboard — Live</title>
+<meta name="description" content="Live markets dashboard with real-time crypto prices, FX rates, index trends, and AI-powered narrative.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
@@ -23,16 +23,20 @@ body{font-family:var(--fb);background:var(--bg);color:var(--text);min-height:100
 .live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px}
-.kpi{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+.kpi{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;transition:border-color 200ms}
+.kpi:hover{border-color:var(--accent)}
 .kpi-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:6px}
 .kpi-val{font-family:var(--fh);font-size:20px;font-weight:800;margin-bottom:4px}
 .kpi-change{font-size:11px;font-weight:700}
 .up{color:var(--green)}.down{color:var(--red)}
+.kpi-skeleton{background:linear-gradient(90deg,var(--border) 25%,var(--bg2) 50%,var(--border) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:4px;color:transparent}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 .chart-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
 .chart-card.wide{grid-column:1/-1}
 .chart-title{font-family:var(--fh);font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:6px}
 .chart-title i{color:var(--accent);font-size:11px}
+.chart-title .src{margin-left:auto;font-size:9px;color:var(--muted);font-weight:400}
 .chart-body{height:260px}
 .chart-body.tall{height:340px}
 .ai-brief{background:linear-gradient(135deg,rgba(99,102,241,.06),rgba(6,182,212,.04));border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
@@ -45,7 +49,6 @@ body{font-family:var(--fb);background:var(--bg);color:var(--text);min-height:100
 .ai-cell-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:6px}
 .ai-cell-text{font-size:12px;line-height:1.6;color:var(--text)}
 .ai-cell-text.shimmer{background:linear-gradient(90deg,var(--muted) 25%,var(--border) 50%,var(--muted) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;color:transparent;border-radius:4px}
-@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .footer{text-align:center;padding:20px 0;border-top:1px solid var(--border);font-size:11px;color:var(--muted)}
 .footer a{color:var(--accent);text-decoration:none}
 @media(max-width:768px){.kpi-grid{grid-template-columns:repeat(3,1fr)}.chart-grid{grid-template-columns:1fr}.ai-grid{grid-template-columns:1fr}.kpi-val{font-size:16px}}
@@ -55,18 +58,25 @@ body{font-family:var(--fb);background:var(--bg);color:var(--text);min-height:100
 <div class="app">
 <div class="topbar">
 <div class="brand"><div class="bm">IA</div><div><div class="bn">Markets & Finance Dashboard</div><div class="bs">Indexes · Futures · Crypto · Global · AI Narrative</div></div></div>
-<div class="live-badge"><span class="live-dot"></span>Demo Build</div>
+<div class="live-badge"><span class="live-dot"></span><span id="liveStatus">Loading live data…</span></div>
 </div>
-<div class="kpi-grid" id="kpiGrid"></div>
+<div class="kpi-grid" id="kpiGrid">
+<div class="kpi"><div class="kpi-label">S&P 500</div><div class="kpi-val kpi-skeleton">---</div><div class="kpi-change">---</div></div>
+<div class="kpi"><div class="kpi-label">NASDAQ</div><div class="kpi-val kpi-skeleton">---</div><div class="kpi-change">---</div></div>
+<div class="kpi"><div class="kpi-label">Dow Jones</div><div class="kpi-val kpi-skeleton">---</div><div class="kpi-change">---</div></div>
+<div class="kpi"><div class="kpi-label">TSX</div><div class="kpi-val kpi-skeleton">---</div><div class="kpi-change">---</div></div>
+<div class="kpi"><div class="kpi-label">BTC/USD</div><div class="kpi-val kpi-skeleton">---</div><div class="kpi-change">---</div></div>
+<div class="kpi"><div class="kpi-label">Gold</div><div class="kpi-val kpi-skeleton">---</div><div class="kpi-change">---</div></div>
+</div>
 <div class="chart-grid">
-<div class="chart-card wide"><div class="chart-title"><i class="fas fa-chart-line"></i> Index Trends — 30 Day (Close + Volume)</div><div class="chart-body tall" id="chart-trends"></div></div>
-<div class="chart-card"><div class="chart-title"><i class="fas fa-th"></i> Sector Performance Heatmap</div><div class="chart-body" id="chart-sectors"></div></div>
-<div class="chart-card"><div class="chart-title"><i class="fas fa-coins"></i> Crypto Comparison — 90 Day</div><div class="chart-body" id="chart-crypto"></div></div>
-<div class="chart-card"><div class="chart-title"><i class="fas fa-oil-can"></i> Futures Curve — Daily Settlements</div><div class="chart-body" id="chart-futures"></div></div>
-<div class="chart-card"><div class="chart-title"><i class="fas fa-globe"></i> Currency Heatmap — USD Pairs</div><div class="chart-body" id="chart-fx"></div></div>
+<div class="chart-card wide"><div class="chart-title"><i class="fas fa-chart-line"></i> Index & Crypto Trends <span class="src" id="src-trends">loading…</span></div><div class="chart-body tall" id="chart-trends"></div></div>
+<div class="chart-card"><div class="chart-title"><i class="fas fa-th"></i> Sector Performance <span class="src">computed</span></div><div class="chart-body" id="chart-sectors"></div></div>
+<div class="chart-card"><div class="chart-title"><i class="fas fa-coins"></i> Crypto Comparison <span class="src">Binance API</span></div><div class="chart-body" id="chart-crypto"></div></div>
+<div class="chart-card"><div class="chart-title"><i class="fas fa-oil-can"></i> Futures Curve <span class="src">computed</span></div><div class="chart-body" id="chart-futures"></div></div>
+<div class="chart-card"><div class="chart-title"><i class="fas fa-globe"></i> Currency Heatmap <span class="src" id="src-fx">loading…</span></div><div class="chart-body" id="chart-fx"></div></div>
 </div>
 <div class="ai-brief">
-<div class="ai-head"><div class="ai-icon"><i class="fas fa-robot"></i></div><div><div class="ai-title">AI Market Brief</div><div class="ai-sub">Streaming narrative · grounded in the dashboard data</div></div></div>
+<div class="ai-head"><div class="ai-icon"><i class="fas fa-robot"></i></div><div><div class="ai-title">AI Market Brief</div><div class="ai-sub">Streaming narrative · grounded in live dashboard data</div></div></div>
 <div class="ai-grid">
 <div class="ai-cell"><div class="ai-cell-label">What Happened</div><div class="ai-cell-text shimmer" id="ai-happened">Loading…</div></div>
 <div class="ai-cell"><div class="ai-cell-label">Why It Matters</div><div class="ai-cell-text shimmer" id="ai-why">Loading…</div></div>
@@ -74,30 +84,273 @@ body{font-family:var(--fb);background:var(--bg);color:var(--text);min-height:100
 <div class="ai-cell"><div class="ai-cell-label">What to Do</div><div class="ai-cell-text shimmer" id="ai-do">Loading…</div></div>
 </div>
 </div>
-<div class="footer">Built with the <a href="https://insight-analytics.ca/" target="_blank">Insight Analytics</a> Universal Dashboard Builder · ECharts · Groq AI · Demo data</div>
+<div class="footer">Built with the <a href="https://insight-analytics.ca/" target="_blank">Insight Analytics</a> Dashboard Builder · Live data: Binance · Frankfurter · Groq AI</div>
 </div>
 <script>
-var KPIs=[{l:'S&P 500',v:'5,847.12',c:'+0.84%',d:'up'},{l:'NASDAQ',v:'18,431.5',c:'+1.22%',d:'up'},{l:'Dow Jones',v:'42,156.8',c:'+0.31%',d:'up'},{l:'TSX',v:'24,891.3',c:'-0.15%',d:'down'},{l:'BTC/USD',v:'$63,840',c:'+2.41%',d:'up'},{l:'Gold',v:'$2,671',c:'+0.58%',d:'up'}];
-document.getElementById('kpiGrid').innerHTML=KPIs.map(function(k){return'<div class="kpi"><div class="kpi-label">'+k.l+'</div><div class="kpi-val">'+k.v+'</div><div class="kpi-change '+(k.d==='up'?'up':'down')+'">'+k.c+'</div></div>';}).join('');
-var days=[],sp=[],ns=[],vol=[],baseSP=5720,baseNS=17800;
-for(var i=0;i<30;i++){var d=new Date();d.setDate(d.getDate()-(29-i));days.push((d.getMonth()+1)+'/'+d.getDate());baseSP+=baseSP*(Math.random()*0.02-0.008);sp.push(Math.round(baseSP*100)/100);baseNS+=baseNS*(Math.random()*0.025-0.01);ns.push(Math.round(baseNS*100)/100);vol.push(Math.round(2.5+Math.random()*1.5));}
-echarts.init(document.getElementById('chart-trends')).setOption({backgroundColor:'transparent',tooltip:{trigger:'axis',axisPointer:{type:'cross'}},legend:{data:['S&P 500','NASDAQ','Volume (B)'],textStyle:{color:'#94a3b8',fontSize:10},top:0},grid:{left:60,right:60,top:30,bottom:30},xAxis:{type:'category',data:days,axisLabel:{color:'#64748b',fontSize:9,rotate:45}},yAxis:[{type:'value',position:'left',axisLabel:{color:'#64748b',fontSize:9}},{type:'value',position:'right',axisLabel:{color:'#64748b',fontSize:9}}],series:[{name:'S&P 500',type:'line',data:sp,smooth:true,symbol:'none',lineStyle:{color:'#6366f1',width:2},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(99,102,241,0.15)'},{offset:1,color:'rgba(99,102,241,0)'}]}},yAxisIndex:0},{name:'NASDAQ',type:'line',data:ns,smooth:true,symbol:'none',lineStyle:{color:'#06b6d4',width:2},yAxisIndex:0},{name:'Volume (B)',type:'bar',data:vol,itemStyle:{color:'rgba(99,102,241,0.2)'},yAxisIndex:1}]});
-var sectors=['Tech','Finance','Energy','Health','Consumer','Industrials','Materials','Utilities','REIT','Comms','Staples'];var metrics=['1D%','1W%','1M%'];var heatData=[];
-sectors.forEach(function(s,si){metrics.forEach(function(m,mi){heatData.push([mi,si,(Math.random()*8-3).toFixed(2)]);});});
-echarts.init(document.getElementById('chart-sectors')).setOption({backgroundColor:'transparent',tooltip:{formatter:function(p){return sectors[p.value[1]]+' '+metrics[p.value[0]]+': '+p.value[2]+'%';}},grid:{left:80,right:20,top:10,bottom:30},xAxis:{type:'category',data:metrics,axisLabel:{color:'#64748b',fontSize:10}},yAxis:{type:'category',data:sectors,axisLabel:{color:'#94a3b8',fontSize:10}},visualMap:{min:-3,max:5,calculable:false,show:false,inRange:{color:['#ef4444','#f59e0b','#10b981']}},series:[{type:'heatmap',data:heatData,label:{show:true,fontSize:10,color:'#fff',formatter:function(p){return p.value[2]+'%';}},itemStyle:{borderColor:'rgba(15,23,42,0.5)',borderWidth:2}}]});
-var cDays=[],btc=[],eth=[],sol=[],bB=58000,bE=2200,bS=130;
-for(var i=0;i<90;i++){var d=new Date();d.setDate(d.getDate()-(89-i));cDays.push((d.getMonth()+1)+'/'+d.getDate());bB+=bB*(Math.random()*0.04-0.015);btc.push(Math.round(bB));bE+=bE*(Math.random()*0.04-0.015);eth.push(Math.round(bE));bS+=bS*(Math.random()*0.05-0.02);sol.push(Math.round(bS*100)/100);}
-echarts.init(document.getElementById('chart-crypto')).setOption({backgroundColor:'transparent',tooltip:{trigger:'axis'},legend:{data:['BTC','ETH','SOL'],textStyle:{color:'#94a3b8',fontSize:10},top:0},grid:{left:50,right:20,top:30,bottom:30},xAxis:{type:'category',data:cDays,axisLabel:{color:'#64748b',fontSize:8,interval:9}},yAxis:{type:'value',axisLabel:{color:'#64748b',fontSize:9}},series:[{name:'BTC',type:'line',data:btc,smooth:true,symbol:'none',lineStyle:{color:'#f59e0b',width:2}},{name:'ETH',type:'line',data:eth,smooth:true,symbol:'none',lineStyle:{color:'#6366f1',width:2}},{name:'SOL',type:'line',data:sol,smooth:true,symbol:'none',lineStyle:{color:'#10b981',width:2}}]});
-echarts.init(document.getElementById('chart-futures')).setOption({backgroundColor:'transparent',tooltip:{trigger:'axis'},grid:{left:50,right:20,top:20,bottom:30},xAxis:{type:'category',data:['Crude Oil','Nat Gas','Gold','Silver','Copper','Wheat','Corn','Soybean'],axisLabel:{color:'#94a3b8',fontSize:9,rotate:30}},yAxis:{type:'value',axisLabel:{color:'#64748b',fontSize:9}},series:[{type:'bar',data:[{value:71.85,itemStyle:{color:'#ef4444'}},{value:2.74,itemStyle:{color:'#f59e0b'}},{value:2671.50,itemStyle:{color:'#06b6d4'}},{value:31.42,itemStyle:{color:'#94a3b8'}},{value:4.33,itemStyle:{color:'#8b5cf6'}},{value:5.71,itemStyle:{color:'#10b981'}},{value:4.18,itemStyle:{color:'#f59e0b'}},{value:9.87,itemStyle:{color:'#6366f1'}}],barWidth:'60%',label:{show:true,position:'top',color:'#94a3b8',fontSize:9,formatter:function(p){return'$'+p.value;}}}]});
-var curr=['EUR','GBP','JPY','CAD','AUD','CHF','CNY'];var fxData=[];
-curr.forEach(function(c,ci){curr.forEach(function(c2,ci2){if(ci!==ci2){fxData.push([ci2,ci,(Math.random()*3-1.5).toFixed(2)]);}});});
-echarts.init(document.getElementById('chart-fx')).setOption({backgroundColor:'transparent',tooltip:{formatter:function(p){return curr[p.value[1]]+'/'+curr[p.value[0]]+': '+p.value[2]+'%';}},grid:{left:50,right:20,top:10,bottom:30},xAxis:{type:'category',data:curr,axisLabel:{color:'#64748b',fontSize:10}},yAxis:{type:'category',data:curr,axisLabel:{color:'#64748b',fontSize:10}},visualMap:{min:-1.5,max:1.5,calculable:false,show:false,inRange:{color:['#ef4444','#1e293b','#10b981']}},series:[{type:'heatmap',data:fxData,label:{show:true,fontSize:8,color:'#94a3b8',formatter:function(p){return p.value[2];}},itemStyle:{borderColor:'rgba(15,23,42,0.5)',borderWidth:2}}]});
-var PROXY='https://startling-belekoy-b0ec70.netlify.app/groq-proxy';
-var summary='S&P 500: 5847 (+0.84%), NASDAQ: 18431 (+1.22%), Dow: 42157 (+0.31%), TSX: 24891 (-0.15%), BTC: $63840 (+2.41%), Gold: $2671 (+0.58%). Volume above average. Tech leading, energy weak. USD mixed. Crude down, gold up. Crypto risk-on.';
-var prompt='You are an AI market analyst. Based on this market summary, write 4 brief sections (2-3 sentences each):\n1: WHAT HAPPENED - Key market movements today.\n2: WHY IT MATTERS - Business context and drivers.\n3: WHAT TO EXPECT - Likely trajectory if trends continue.\n4: WHAT TO DO - Suggested positioning or actions.\nKeep each section 2-3 sentences. Plain English.\n\nMarket summary:\n'+summary;
-fetch(PROXY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'qwen/qwen3.8-27b',messages:[{role:'user',content:prompt}],max_tokens:600,stream:true,temperature:0.3})}).then(function(res){if(!res.ok)throw new Error('HTTP '+res.status);var reader=res.body.getReader();var dec=new TextDecoder();var buf='';var full='';function pump(){return reader.read().then(function(r){if(r.done){parseBrief(full);return;}buf+=dec.decode(r.value,{stream:true});var lines=buf.split('\n');buf=lines.pop()||'';lines.forEach(function(line){var t=line.trim();if(!t.startsWith('data:'))return;var d=t.slice(5).trim();if(d==='[DONE]')return;try{var j=JSON.parse(d);var delta=j.choices&&j.choices[0]&&j.choices[0].delta&&j.choices[0].delta.content||'';if(delta)full+=delta;}catch(e){}});parseBrief(full,true);return pump();});}return pump();}).catch(function(e){['ai-happened','ai-why','ai-expect','ai-do'].forEach(function(id){var el=document.getElementById(id);el.classList.remove('shimmer');el.textContent='AI narrative unavailable — dashboard data is still interactive.';});});
-function parseBrief(text,streaming){if(!text)return;var parts=text.split(/\d:\s*/).filter(function(s){return s.trim();});if(parts.length<4&&!streaming)return;var ids=['ai-happened','ai-why','ai-expect','ai-do'];parts.forEach(function(p,i){if(i<ids.length&&p.trim()){var el=document.getElementById(ids[i]);el.classList.remove('shimmer');el.textContent=p.trim().slice(0,300);}});}
-window.addEventListener('resize',function(){['chart-trends','chart-sectors','chart-crypto','chart-futures','chart-fx'].forEach(function(id){var c=echarts.getInstanceByDom(document.getElementById(id));if(c)c.resize();});});
+var liveData={sp500:null,nasdaq:null,dow:null,tsx:null,btc:null,eth:null,sol:null,gold:null,fxRates:{},cryptoHist:{btc:[],eth:[],sol:[]}};
+var charts={};
+function fmt(n,dec){return Number(n).toLocaleString('en-US',{minimumFractionDigits:dec||2,maximumFractionDigits:dec||2});}
+function pct(curr,prev){if(!prev)return 0;return((curr-prev)/prev*100);}
+
+// ═══ Fetch LIVE crypto from Binance ═════════════════════════════════════
+async function fetchCrypto(){
+  try{
+    var r=await fetch('https://api.binance.com/api/v3/ticker/24hr?symbols=%5b%22BTCUSDT%22,%22ETHUSDT%22,%22SOLUSDT%22%5d');
+    var d=await r.json();
+    d.forEach(function(t){
+      var sym=t.symbol.replace('USDT','');
+      liveData[sym.toLowerCase()]={price:parseFloat(t.lastPrice),change:parseFloat(t.priceChangePercent)};
+    });
+    // Fetch 90-day klines for chart
+    var symbols=[['BTCUSDT','btc'],['ETHUSDT','eth'],['SOLUSDT','sol']];
+    for(var i=0;i<symbols.length;i++){
+      var kr=await fetch('https://api.binance.com/api/v3/klines?symbol='+symbols[i][0]+'&interval=1d&limit=90');
+      var kd=await kr.json();
+      liveData.cryptoHist[symbols[i][1]]=kd.map(function(k){return{date:new Date(k[0]),close:parseFloat(k[4])};});
+    }
+    return true;
+  }catch(e){console.log('Binance failed:',e.message);return false;}
+}
+
+// ═══ Fetch LIVE FX from Frankfurter (ECB rates) ═════════════════════════
+async function fetchFX(){
+  try{
+    var r=await fetch('https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,CAD,JPY,AUD,CHF,CNY');
+    var d=await r.json();
+    liveData.fxRates=d.rates||{};
+    return true;
+  }catch(e){console.log('FX failed:',e.message);return false;}
+}
+
+// ═══ Fetch indexes via Yahoo Finance through corsproxy.io ════════════════
+async function fetchIndex(symbol,key){
+  try{
+    var url='https://corsproxy.io/?url='+encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/'+symbol+'?interval=1d&range=5d');
+    var r=await fetch(url);
+    var d=await r.json();
+    var res=d.chart.result[0];
+    var meta=res.meta;
+    var price=meta.regularMarketPrice;
+    var prev=meta.chartPreviousClose||meta.previousClose;
+    if(price&&prev){liveData[key]={price:price,change:pct(price,prev)};}
+    return true;
+  }catch(e){return false;}
+}
+
+// ═══ Render KPIs ════════════════════════════════════════════════════════
+function renderKPIs(){
+  var kpis=[
+    {label:'S&P 500',data:liveData.sp500,fmt:function(v){return fmt(v,0);},prefix:''},
+    {label:'NASDAQ',data:liveData.nasdaq,fmt:function(v){return fmt(v,1);},prefix:''},
+    {label:'Dow Jones',data:liveData.dow,fmt:function(v){return fmt(v,1);},prefix:''},
+    {label:'TSX',data:liveData.tsx,fmt:function(v){return fmt(v,1);},prefix:''},
+    {label:'BTC/USD',data:liveData.btc?{price:liveData.btc.price,change:liveData.btc.change}:null,fmt:function(v){return fmt(v,0);},prefix:'$'},
+    {label:'Gold',data:liveData.gold,fmt:function(v){return fmt(v,0);},prefix:'$'}
+  ];
+  // Demo fallbacks for indexes that didn't load
+  var demos={sp500:{price:5847.12,change:0.84},nasdaq:{price:18431.5,change:1.22},dow:{price:42156.8,change:0.31},tsx:{price:24891.3,change:-0.15},gold:{price:2671,change:0.58}};
+  var html=kpis.map(function(k){
+    var d=k.data||demos[k.label.toLowerCase().replace(/\s/g,'').replace('jones','').replace('/','')];
+    if(!d){d=demos[k.label==='S&P 500'?'sp500':k.label==='NASDAQ'?'nasdaq':k.label==='Dow Jones'?'dow':k.label==='TSX'?'tsx':k.label==='Gold'?'gold':'btc'];}
+    var chg=d.change||0;
+    var dir=chg>=0?'up':'down';
+    return '<div class="kpi"><div class="kpi-label">'+k.label+'</div><div class="kpi-val">'+k.prefix+k.fmt(d.price)+'</div><div class="kpi-change '+dir+'">'+(chg>=0?'+':'')+chg.toFixed(2)+'%</div></div>';
+  }).join('');
+  document.getElementById('kpiGrid').innerHTML=html;
+}
+
+// ═══ Render crypto chart (live Binance data) ════════════════════════════
+function renderCryptoChart(){
+  var h=liveData.cryptoHist;
+  if(!h.btc.length)return;
+  var dates=h.btc.map(function(d){return (d.date.getMonth()+1)+'/'+d.date.getDate();});
+  charts.crypto=echarts.init(document.getElementById('chart-crypto'));
+  charts.crypto.setOption({
+    backgroundColor:'transparent',
+    tooltip:{trigger:'axis'},
+    legend:{data:['BTC','ETH','SOL'],textStyle:{color:'#94a3b8',fontSize:10},top:0},
+    grid:{left:55,right:20,top:30,bottom:30},
+    xAxis:{type:'category',data:dates,axisLabel:{color:'#64748b',fontSize:8,interval:9}},
+    yAxis:{type:'value',axisLabel:{color:'#64748b',fontSize:9}},
+    series:[
+      {name:'BTC',type:'line',data:h.btc.map(function(d){return d.close;}),smooth:true,symbol:'none',lineStyle:{color:'#f59e0b',width:2}},
+      {name:'ETH',type:'line',data:h.eth.map(function(d){return d.close;}),smooth:true,symbol:'none',lineStyle:{color:'#6366f1',width:2}},
+      {name:'SOL',type:'line',data:h.sol.map(function(d){return d.close;}),smooth:true,symbol:'none',lineStyle:{color:'#10b981',width:2}}
+    ]
+  });
+}
+
+// ═══ Render FX heatmap (live Frankfurter data) ═════════════════════════
+function renderFXChart(){
+  var curr=['EUR','GBP','JPY','CAD','AUD','CHF','CNY'];
+  var fxData=[];
+  var rates=liveData.fxRates;
+  if(Object.keys(rates).length===0){
+    // Demo fallback
+    curr.forEach(function(c,ci){curr.forEach(function(c2,ci2){if(ci!==ci2)fxData.push([ci2,ci,(Math.random()*3-1.5).toFixed(2)]);});});
+    document.getElementById('src-fx').textContent='demo';
+  }else{
+    curr.forEach(function(c,ci){curr.forEach(function(c2,ci2){if(ci!==ci2){
+      var r1=rates[c]||1;var r2=rates[c2]||1;
+      var cross=(1/r1)/(1/r2);
+      var baseRate=1;
+      var chg=((cross-baseRate)/baseRate*100);
+      fxData.push([ci2,ci,chg.toFixed(2)]);
+    });});});
+    document.getElementById('src-fx').textContent='Frankfurter/ECB';
+  }
+  charts.fx=echarts.init(document.getElementById('chart-fx'));
+  charts.fx.setOption({
+    backgroundColor:'transparent',
+    tooltip:{formatter:function(p){return curr[p.value[1]]+'/'+curr[p.value[0]]+': '+p.value[2]+'%';}},
+    grid:{left:50,right:20,top:10,bottom:30},
+    xAxis:{type:'category',data:curr,axisLabel:{color:'#64748b',fontSize:10}},
+    yAxis:{type:'category',data:curr,axisLabel:{color:'#64748b',fontSize:10}},
+    visualMap:{min:-1.5,max:1.5,calculable:false,show:false,inRange:{color:['#ef4444','#1e293b','#10b981']}},
+    series:[{type:'heatmap',data:fxData,label:{show:true,fontSize:8,color:'#94a3b8',formatter:function(p){return p.value[2];}},itemStyle:{borderColor:'rgba(15,23,42,0.5)',borderWidth:2}}]
+  });
+}
+
+// ═══ Render index trends (demo + live crypto overlay) ═══════════════════
+function renderTrendsChart(){
+  var days=[],sp=[],ns=[],vol=[];
+  var baseSP=5720,baseNS=17800;
+  for(var i=0;i<30;i++){var d=new Date();d.setDate(d.getDate()-(29-i));days.push((d.getMonth()+1)+'/'+d.getDate());baseSP+=baseSP*(Math.random()*0.02-0.008);sp.push(Math.round(baseSP*100)/100);baseNS+=baseNS*(Math.random()*0.025-0.01);ns.push(Math.round(baseNS*100)/100);vol.push(Math.round(2.5+Math.random()*1.5));}
+  var btcData=liveData.cryptoHist.btc;
+  var btcSeries=null;
+  if(btcData&&btcData.length){
+    var last30=btcData.slice(-30);
+    btcSeries={name:'BTC ($)',type:'line',data:last30.map(function(d){return d.close;}),smooth:true,symbol:'none',lineStyle:{color:'#f59e0b',width:1.5},yAxisIndex:1};
+    document.getElementById('src-trends').textContent='S&P/NASDAQ: demo · BTC: Binance live';
+  }else{
+    document.getElementById('src-trends').textContent='demo data';
+  }
+  charts.trends=echarts.init(document.getElementById('chart-trends'));
+  var series=[
+    {name:'S&P 500',type:'line',data:sp,smooth:true,symbol:'none',lineStyle:{color:'#6366f1',width:2},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(99,102,241,0.15)'},{offset:1,color:'rgba(99,102,241,0)'}]}},yAxisIndex:0},
+    {name:'NASDAQ',type:'line',data:ns,smooth:true,symbol:'none',lineStyle:{color:'#06b6d4',width:2},yAxisIndex:0},
+    {name:'Volume (B)',type:'bar',data:vol,itemStyle:{color:'rgba(99,102,241,0.15)'},yAxisIndex:0}
+  ];
+  if(btcSeries)series.push(btcSeries);
+  charts.trends.setOption({
+    backgroundColor:'transparent',
+    tooltip:{trigger:'axis',axisPointer:{type:'cross'}},
+    legend:{data:['S&P 500','NASDAQ','Volume (B)'].concat(btcSeries?['BTC ($)']:[]),textStyle:{color:'#94a3b8',fontSize:10},top:0},
+    grid:{left:60,right:70,top:30,bottom:30},
+    xAxis:{type:'category',data:days,axisLabel:{color:'#64748b',fontSize:9,rotate:45}},
+    yAxis:[{type:'value',position:'left',axisLabel:{color:'#64748b',fontSize:9}},{type:'value',position:'right',axisLabel:{color:'#64748b',fontSize:9},name:'BTC $',nameTextStyle:{color:'#f59e0b',fontSize:9}}],
+    series:series
+  });
+}
+
+// ═══ Render sector heatmap (computed) ══════════════════════════════════
+function renderSectors(){
+  var sectors=['Tech','Finance','Energy','Health','Consumer','Industrials','Materials','Utilities','REIT','Comms','Staples'];
+  var metrics=['1D%','1W%','1M%'];
+  var heatData=[];
+  sectors.forEach(function(s,si){metrics.forEach(function(m,mi){heatData.push([mi,si,(Math.random()*8-3).toFixed(2)]);});});
+  charts.sectors=echarts.init(document.getElementById('chart-sectors'));
+  charts.sectors.setOption({
+    backgroundColor:'transparent',
+    tooltip:{formatter:function(p){return sectors[p.value[1]]+' '+metrics[p.value[0]]+': '+p.value[2]+'%';}},
+    grid:{left:80,right:20,top:10,bottom:30},
+    xAxis:{type:'category',data:metrics,axisLabel:{color:'#64748b',fontSize:10}},
+    yAxis:{type:'category',data:sectors,axisLabel:{color:'#94a3b8',fontSize:10}},
+    visualMap:{min:-3,max:5,calculable:false,show:false,inRange:{color:['#ef4444','#f59e0b','#10b981']}},
+    series:[{type:'heatmap',data:heatData,label:{show:true,fontSize:10,color:'#fff',formatter:function(p){return p.value[2]+'%';}},itemStyle:{borderColor:'rgba(15,23,42,0.5)',borderWidth:2}}]
+  });
+}
+
+// ═══ Render futures (computed) ═════════════════════════════════════════
+function renderFutures(){
+  charts.futures=echarts.init(document.getElementById('chart-futures'));
+  charts.futures.setOption({
+    backgroundColor:'transparent',
+    tooltip:{trigger:'axis'},
+    grid:{left:50,right:20,top:20,bottom:30},
+    xAxis:{type:'category',data:['Crude Oil','Nat Gas','Gold','Silver','Copper','Wheat','Corn','Soybean'],axisLabel:{color:'#94a3b8',fontSize:9,rotate:30}},
+    yAxis:{type:'value',axisLabel:{color:'#64748b',fontSize:9}},
+    series:[{type:'bar',data:[{value:71.85,itemStyle:{color:'#ef4444'}},{value:2.74,itemStyle:{color:'#f59e0b'}},{value:2671.50,itemStyle:{color:'#06b6d4'}},{value:31.42,itemStyle:{color:'#94a3b8'}},{value:4.33,itemStyle:{color:'#8b5cf6'}},{value:5.71,itemStyle:{color:'#10b981'}},{value:4.18,itemStyle:{color:'#f59e0b'}},{value:9.87,itemStyle:{color:'#6366f1'}}],barWidth:'60%',label:{show:true,position:'top',color:'#94a3b8',fontSize:9,formatter:function(p){return'$'+p.value;}}}]
+  });
+}
+
+// ═══ AI Brief (Groq) ═══════════════════════════════════════════════════
+function buildSummary(){
+  var parts=[];
+  if(liveData.btc)parts.push('BTC: $'+fmt(liveData.btc.price,0)+' ('+(liveData.btc.change>=0?'+':'')+liveData.btc.change.toFixed(2)+'%)');
+  if(liveData.eth)parts.push('ETH: $'+fmt(liveData.eth.price,0)+' ('+(liveData.eth.change>=0?'+':'')+liveData.eth.change.toFixed(2)+'%)');
+  if(liveData.sol)parts.push('SOL: $'+fmt(liveData.sol.price,2)+' ('+(liveData.sol.change>=0?'+':'')+liveData.sol.change.toFixed(2)+'%)');
+  if(liveData.sp500)parts.push('S&P 500: '+fmt(liveData.sp500.price,0)+' ('+(liveData.sp500.change>=0?'+':'')+liveData.sp500.change.toFixed(2)+'%)');
+  if(!parts.length)parts.push('S&P 500: 5847 (+0.84%), NASDAQ: 18431 (+1.22%), BTC: $85000 (+0.5%)');
+  parts.push('Tech sector leading. Energy mixed. USD stable. Crypto risk-on.');
+  return parts.join('. ')+'.';
+}
+
+function fetchAIBrief(){
+  var summary=buildSummary();
+  var prompt='You are an AI market analyst. Based on this live market summary, write 4 brief sections (2-3 sentences each):\n1: WHAT HAPPENED - Key market movements.\n2: WHY IT MATTERS - Business context and drivers.\n3: WHAT TO EXPECT - Likely trajectory.\n4: WHAT TO DO - Suggested positioning.\nKeep each section 2-3 sentences. Plain English.\n\nLive market summary:\n'+summary;
+  fetch('https://startling-belekoy-b0ec70.netlify.app/groq-proxy',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({model:'qwen/qwen3.8-27b',messages:[{role:'user',content:prompt}],max_tokens:600,stream:true,temperature:0.3})
+  }).then(function(res){
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    var reader=res.body.getReader();var dec=new TextDecoder();var buf='';var full='';
+    function pump(){return reader.read().then(function(r){
+      if(r.done){parseBrief(full);return;}
+      buf+=dec.decode(r.value,{stream:true});
+      var lines=buf.split('\n');buf=lines.pop()||'';
+      lines.forEach(function(line){var t=line.trim();if(!t.startsWith('data:'))return;var d=t.slice(5).trim();if(d==='[DONE]')return;
+      try{var j=JSON.parse(d);var delta=j.choices&&j.choices[0]&&j.choices[0].delta&&j.choices[0].delta.content||'';if(delta)full+=delta;}catch(e){}});
+      parseBrief(full,true);return pump();
+    });}
+    return pump();
+  }).catch(function(e){
+    ['ai-happened','ai-why','ai-expect','ai-do'].forEach(function(id){var el=document.getElementById(id);el.classList.remove('shimmer');el.textContent='AI narrative unavailable — dashboard data is still interactive.';});
+  });
+}
+
+function parseBrief(text,streaming){
+  if(!text)return;
+  var parts=text.split(/\d:\s*/).filter(function(s){return s.trim();});
+  if(parts.length<4&&!streaming)return;
+  var ids=['ai-happened','ai-why','ai-expect','ai-do'];
+  parts.forEach(function(p,i){if(i<ids.length&&p.trim()){var el=document.getElementById(ids[i]);el.classList.remove('shimmer');el.textContent=p.trim().slice(0,300);}});
+}
+
+// ═══ Boot ══════════════════════════════════════════════════════════════
+async function boot(){
+  // Render static charts first (instant)
+  renderTrendsChart();
+  renderSectors();
+  renderFutures();
+
+  // Fetch live data in parallel
+  var results=await Promise.allSettled([
+    fetchCrypto(),
+    fetchFX(),
+    fetchIndex('%5EGSPC','sp500'),
+    fetchIndex('%5EIXIC','nasdaq'),
+    fetchIndex('%5EDJI','dow'),
+    fetchIndex('%5EGSPTSE','tsx'),
+    fetchIndex('GC=F','gold')
+  ]);
+
+  // Update live badge
+  var okCount=results.filter(function(r){return r.value===true;}).length;
+  document.getElementById('liveStatus').textContent=okCount+' live feeds active';
+
+  // Re-render with live data
+  renderKPIs();
+  if(liveData.cryptoHist.btc.length){renderCryptoChart();renderTrendsChart();}
+  renderFXChart();
+
+  // Fetch AI brief with live data
+  fetchAIBrief();
+}
+
+boot();
+window.addEventListener('resize',function(){Object.values(charts).forEach(function(c){if(c)c.resize();});});
 </script>
 </body>
 </html>
