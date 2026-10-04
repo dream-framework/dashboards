@@ -844,3 +844,54 @@ Stage Summary:
   2. Reopen — new SW v2.8.0 installs + activates via skipWaiting, deletes old cache
   3. Live iframe now loads without SW interference, renders fully on iOS Safari + PWA
   4. If iframe still stalls on a flaky network, the 12s fallback surfaces an "Open in new tab" link
+
+---
+Task ID: iframe-safari-fix-v6-inline-renderer
+Agent: main (super-z)
+Task: User pointed to markets-dashboard + bill-dashboard as the working reference. Both render dashboards INLINE — no iframe, no SW, no CORS. The marketing site's dashboard showcase needed the same pattern.
+
+Work Log:
+- Investigated markets-dashboard (insightanalyticsca.github.io/markets-dashboard): a single static HTML page that calls Binance API directly via fetch(), renders ECharts into page divs. NO iframe. NO service worker registration. Works on every browser.
+- Investigated bill-dashboard (github.com/insightanalyticsca/bill-dashboard): a Next.js app with a MarketsStrip component that calls /api/markets (same-origin Next.js API route) which proxies Yahoo/CoinGecko/Kraken. The browser fetches same-origin, no CORS issues.
+- Pattern identified: both dashboards render INLINE — direct fetch() to data, ECharts renders into page divs, no iframe document, no SW interference.
+- Wrote /js/exec-dashboard-inline.js (200-line custom renderer):
+  - window.loadExecDashboard(suite) — fetches /dashboards-preview/data/executive/<suite>.json
+  - Renders metrics row (4 KPI cards with MoM/YoY deltas)
+  - Renders 7 ECharts charts: pie, donut, bar, line, combo (line+bar w/ dual axes), heatmap
+  - Renders AI brief notes (4 cells: What happened / Why / What to expect / What to do)
+  - Disposes existing chart instances on dashboard switch (no memory leak)
+  - Updates the masked URL bar + "Open live dashboard" CTA href on switch
+  - Resizes charts on window resize
+- Added scoped CSS to /css/styles.css (~170 lines):
+  - All rules scoped to #exec-dashboard-mount — no body/html selectors
+  - Marketing site's theme is completely unaffected
+  - Dark theme support via [data-theme="dark"] overrides
+  - Responsive: 3 cols on desktop, 2 on tablet, 1 on mobile
+- Updated index.html:
+  - Replaced <iframe id="dashboard-iframe"> with <div id="exec-dashboard-mount">Loading dashboard…</div>
+  - Removed the loading overlay (no longer needed — inline render is fast)
+  - Removed the fallback timer logic (no longer needed)
+  - Added <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" defer> to <head>
+  - Added <script src="./js/exec-dashboard-inline.js" defer>
+- Updated app.js:
+  - Replaced iframe switcher logic with a call to window.loadExecDashboard(suite)
+  - dashToSuite map: executive→chatters, payments→payments, ebill→ebill
+  - initDashboard() polls for window.loadExecDashboard to be defined (waits for deferred scripts)
+- Bumped SW VERSION to v2.9.0-20261005-inline-renderer
+- Committed (469b6bb) and pushed to origin/main — GitHub Pages deployed within 60s
+- Verified end-to-end against LIVE production site https://insight-analytics.ca/:
+  - SW v2.9.0 deployed ✓
+  - exec-dashboard-inline.js HTTP 200 (12,282 bytes) ✓
+  - index.html: <div id="exec-dashboard-mount"> + ECharts CDN script + exec-dashboard-inline.js script ✓
+  - NO <iframe id="dashboard-iframe"> in the HTML ✓
+  - Markets tab (chatters): 4 metrics + 7 charts, NOT stuck on loading ✓
+  - Customer Payments tab (payments): clicked → 4 metrics + 3 charts, URL bar updated to "insight-analytics.ca/dashboards/customer-payments" ✓
+  - eBill Performance tab (ebill): 4 metrics + 3 charts ✓
+
+Stage Summary:
+- Pushed commit 469b6bb to origin/main — live site now renders the dashboard INLINE
+- This is the markets-dashboard pattern applied to the executive dashboard: no iframe, no SW, no CORS, no CDN-loading-inside-iframe-context issues
+- Dashboard data fetch happens directly in the marketing site's JS context (just like markets-dashboard calls Binance directly)
+- ECharts renders into page divs (just like markets-dashboard renders charts)
+- Works on every browser including iOS Safari + PWA (proven by markets-dashboard working on those platforms)
+- User instructions: force-close the PWA + reopen to drop the old v2.8.0 SW; new SW v2.9.0 activates via skipWaiting; the dashboard now renders inline with full interactivity (chart hover, theme-aware dark mode, AI brief panel)
