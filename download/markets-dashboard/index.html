@@ -92,7 +92,7 @@ var charts={};
 function fmt(n,dec){return Number(n).toLocaleString('en-US',{minimumFractionDigits:dec||2,maximumFractionDigits:dec||2});}
 function pct(curr,prev){if(!prev)return 0;return((curr-prev)/prev*100);}
 
-// ═══ Fetch LIVE crypto from Binance ═════════════════════════════════════
+// ═══ Fetch LIVE crypto from Binance (fast: single ticker call only) ═══ ═════════════════════════════════════
 async function fetchCrypto(){
   try{
     var r=await fetch('https://api.binance.com/api/v3/ticker/24hr?symbols=%5b%22BTCUSDT%22,%22ETHUSDT%22,%22SOLUSDT%22%5d');
@@ -101,41 +101,16 @@ async function fetchCrypto(){
       var sym=t.symbol.replace('USDT','');
       liveData[sym.toLowerCase()]={price:parseFloat(t.lastPrice),change:parseFloat(t.priceChangePercent)};
     });
-    // Fetch 90-day klines for chart
-    var symbols=[['BTCUSDT','btc'],['ETHUSDT','eth'],['SOLUSDT','sol']];
-    for(var i=0;i<symbols.length;i++){
-      var kr=await fetch('https://api.binance.com/api/v3/klines?symbol='+symbols[i][0]+'&interval=1d&limit=90');
-      var kd=await kr.json();
-      liveData.cryptoHist[symbols[i][1]]=kd.map(function(k){return{date:new Date(k[0]),close:parseFloat(k[4])};});
-    }
+    // Skip klines (slow) — use demo data for crypto chart, real prices for KPIs only
     return true;
   }catch(e){console.log('Binance failed:',e.message);return false;}
 }
 
-// ═══ Fetch LIVE FX from Frankfurter (ECB rates) ═════════════════════════
-async function fetchFX(){
-  try{
-    var r=await fetch('https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,CAD,JPY,AUD,CHF,CNY');
-    var d=await r.json();
-    liveData.fxRates=d.rates||{};
-    return true;
-  }catch(e){console.log('FX failed:',e.message);return false;}
-}
+// FX fetch removed — using demo data (Frankfurter was too slow)
+// liveData.fxRates stays empty → renderFXChart uses demo fallback
 
-// ═══ Fetch indexes via Yahoo Finance through corsproxy.io ════════════════
-async function fetchIndex(symbol,key){
-  try{
-    var url='https://corsproxy.io/?url='+encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/'+symbol+'?interval=1d&range=5d');
-    var r=await fetch(url);
-    var d=await r.json();
-    var res=d.chart.result[0];
-    var meta=res.meta;
-    var price=meta.regularMarketPrice;
-    var prev=meta.chartPreviousClose||meta.previousClose;
-    if(price&&prev){liveData[key]={price:price,change:pct(price,prev)};}
-    return true;
-  }catch(e){return false;}
-}
+// Index fetch via Yahoo/corsproxy removed — too slow + unreliable
+// Indexes use demo fallback data (instant render)
 
 // ═══ Render KPIs ════════════════════════════════════════════════════════
 function renderKPIs(){
@@ -325,27 +300,17 @@ async function boot(){
   renderSectors();
   renderFutures();
 
-  // Fetch live data in parallel
-  var results=await Promise.allSettled([
-    fetchCrypto(),
-    fetchFX(),
-    fetchIndex('%5EGSPC','sp500'),
-    fetchIndex('%5EIXIC','nasdaq'),
-    fetchIndex('%5EDJI','dow'),
-    fetchIndex('%5EGSPTSE','tsx'),
-    fetchIndex('GC=F','gold')
-  ]);
+  // Only fetch Binance ticker (fast, single call, reliable)
+  var binanceOk=false;
+  try{
+    binanceOk=await fetchCrypto();
+  }catch(e){}
 
-  // Update live badge
-  var okCount=results.filter(function(r){return r.value===true;}).length;
-  document.getElementById('liveStatus').textContent=okCount+' live feeds active';
-
-  // Re-render with live data
+  // Render KPIs immediately (Binance data if available, demo fallback for the rest)
+  document.getElementById('liveStatus').textContent=binanceOk?'Live: Binance crypto':'Demo data';
   renderKPIs();
-  if(liveData.cryptoHist.btc.length){renderCryptoChart();renderTrendsChart();}
-  renderFXChart();
 
-  // Fetch AI brief with live data
+  // Fetch AI brief immediately (don't wait for anything else)
   fetchAIBrief();
 }
 
