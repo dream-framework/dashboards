@@ -43,4 +43,8 @@
   function = "send-email"
   path = "/send-email"
 
-# Last updated: trigger rebuild for send-email edge function registration
+[[edge_functions]]
+  function = "markets-proxy"
+  path = "/markets-proxy"
+
+# Last updated: add markets-proxy edge function for live indices + FX
