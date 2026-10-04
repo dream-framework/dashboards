@@ -739,3 +739,34 @@ Stage Summary:
 - Root cause: dashboard's service worker (registered inside the iframe) intercepts the JSON data fetch on iOS Safari/PWA and the response never resolves, leaving "Loading dashboard data…" on screen forever. The previous sandbox fix didn't work because iOS Safari blocks opaque-origin fetches in sandboxed iframes.
 - Final fix: serve a local mirror of the dashboard with no SW registration → no SW interference → iframe renders fully on every browser including iOS Safari + PWA
 - Verified end-to-end with headless browser: dashboard loads in ~3-5s with all 4 metrics + 7 charts visible, no stuck loading, no errors
+
+---
+Task ID: iframe-safari-fix-v3-deploy
+Agent: main (super-z)
+Task: User reported "no change" on PWA + Safari after the local mirror fix — root cause was that changes were local-only, not pushed to GitHub Pages.
+
+Work Log:
+- Discovered all changes from v2 fix were uncommitted locally (4 modified files + untracked dashboards-preview/ directory)
+- Committed all changes with descriptive message
+- Pushed to origin/main (commit d1ac6ca, replacing 7316a65)
+- Waited 60s for GitHub Pages build + deploy
+- Verified all new files are live on https://insight-analytics.ca/:
+  - /dashboards-preview/custom-html/executive-chatters-portfolio.html → HTTP 200, 1511 bytes (clean preview version)
+  - /dashboards-preview/js/dash-suite.js → HTTP 200, 36970 bytes
+  - /dashboards-preview/css/executive-dashboard-suite.css → HTTP 200, 30502 bytes
+  - /dashboards-preview/data/executive/chatters.json → HTTP 200, 13855 bytes
+  - /dashboards-preview/data/executive/payments.json → HTTP 200, 7202 bytes
+  - service-worker.js VERSION → v2.6.0-20261005-local-mirror (was v2.5.0)
+  - index.html iframe data-src → ./dashboards-preview/custom-html/... (was remote URL)
+- Verified end-to-end against LIVE production site https://insight-analytics.ca/ using headless browser:
+  - Markets dashboard (Executive Operating): iframe readyState=complete, title="Executive Operating Dashboard", #app innerHTML=18,934 chars, NO stuck loading, NO errors, 4 metrics + 7 ECharts charts rendered ✓
+  - Finance dashboard (Customer Payments): clicked switcher tab → iframe src swaps to local mirror, readyState=complete, title="Customer Payments", NO stuck loading, NO errors, 4 metrics + 3 charts rendered ✓
+
+Stage Summary:
+- Pushed commit d1ac6ca to origin/main — GitHub Pages auto-deployed within 60s
+- Live site confirmed working: iframe loads local mirror dashboard with full rendering (4 metrics + 7/3 charts) — no stuck loading, no errors
+- User instructions for seeing the fix on their PWA:
+  1. Force-close the PWA (swipe up on iOS to kill the app)
+  2. Reopen — this triggers service worker update check; new SW v2.6.0 installs + activates via skipWaiting()
+  3. Old cache (ia-static-v2.5.0-...) is deleted; next navigation fetches fresh index.html with local mirror iframe
+  4. Dashboard iframe will now load from ./dashboards-preview/ (same-origin, no SW interference) — renders fully on iOS Safari + PWA
