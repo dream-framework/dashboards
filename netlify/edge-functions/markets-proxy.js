@@ -55,7 +55,9 @@ function corsHeaders(origin) {
 const cache = new Map();
 
 async function fetchYahooQuote(symbol) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+  // range=1mo — 30 calendar days of daily candles. Was 5d (only gave
+  // current + previous close, not enough for a 30-day trend chart).
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1mo`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -65,11 +67,17 @@ async function fetchYahooQuote(symbol) {
     });
     if (!r.ok) return null;
     const d = await r.json();
-    const meta = d?.chart?.result?.[0]?.meta;
+    const result = d?.chart?.result?.[0];
+    const meta = result?.meta;
     if (!meta) return null;
     const price = meta.regularMarketPrice;
     const prev = meta.chartPreviousClose || meta.previousClose;
     if (!price || !prev) return null;
+    // Extract 30-day historical closes + volumes for the trend chart.
+    // Yahoo returns timestamps + indicators.quote[0].{close,volume} arrays.
+    const closes = result?.indicators?.quote?.[0]?.close || [];
+    const volumes = result?.indicators?.quote?.[0]?.volume || [];
+    const timestamps = result?.timestamp || [];
     return {
       symbol: symbol,
       price: price,
@@ -77,7 +85,10 @@ async function fetchYahooQuote(symbol) {
       changePct: ((price - prev) / prev * 100),
       currency: meta.currency || 'USD',
       exchange: meta.exchangeName || '',
-      lastTradeTime: meta.regularMarketTime || null
+      lastTradeTime: meta.regularMarketTime || null,
+      closes: closes,        // 30 daily close prices (for trend chart)
+      volumes: volumes,      // 30 daily volumes (for volume bars)
+      timestamps: timestamps  // 30 daily timestamps (for x-axis labels)
     };
   } catch (e) {
     return null;
