@@ -70,31 +70,13 @@ html, body {
 }
 
 .brand-mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--theme-primary, var(--primary)) 0%, var(--theme-accent, var(--accent)) 100%);
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 800;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(99,102,241,0.20);
+  flex-shrink: 0;
 }
-
-/* Blend: subtle glow ring that fades into bg, no hard rectangle */
-.brand-mark::after {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: 9px;
-  background: linear-gradient(135deg, var(--theme-primary, var(--primary)), var(--theme-accent, var(--accent)), var(--theme-hot, var(--hot)));
-  opacity: 0.15;
-  z-index: -1;
-  filter: blur(3px);
-}
+.brand-mark svg { width: 100%; height: 100%; }
 
 .brand-text {
   display: flex;
