@@ -70,13 +70,13 @@ html, body {
 }
 
 .brand-mark {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
 }
-.brand-mark svg { width: 100%; height: 100%; }
+.brand-mark svg { width: 100%; height: 100%; display: block; }
 
 .brand-text {
   display: flex;
