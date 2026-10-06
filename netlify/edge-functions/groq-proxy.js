@@ -22,6 +22,13 @@ const DEFAULT_MODEL = 'qwen/qwen3.8-27b';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;  // 24 hours
 const VERIFY_MAX_TOKENS = 5;
 
+// Allowed origins for CORS. The first entry is the FALLBACK returned when
+// the request origin isn't in the list — keep 'https://insight-analytics.ca'
+// as [0] so production always works even if a new origin slips through.
+// IMPORTANT: when adding a new origin, also verify the deployed Netlify
+// edge function actually has this list (a stale deployed version was the
+// root cause of the personalized-power-automate demo failing with
+// "Couldn't reach the AI service" on insight-analytics.ca — Oct 2026).
 const ALLOWED_ORIGINS = [
   'https://insight-analytics.ca',
   'https://www.insight-analytics.ca',
