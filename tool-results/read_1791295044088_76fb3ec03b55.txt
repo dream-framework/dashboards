@@ -1,0 +1,668 @@
+     1→<!DOCTYPE html>
+     2→<html lang="en" data-theme="dark">
+     3→<head>
+     4→  <meta charset="UTF-8">
+     5→  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+     6→  <title>Dashboards Studio — RAG Assistant Demo</title>
+     7→  <meta name="description" content="Corporate dashboards with Groq-powered AI chat, ECharts visualizations, and executive analytics.">
+     8→  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+     9→  <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png">
+    10→  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+    11→  <link rel="manifest" href="./manifest.json">
+    12→  <meta name="theme-color" content="#6366f1">
+    13→  <meta name="apple-mobile-web-app-capable" content="yes">
+    14→  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    15→  <meta name="apple-mobile-web-app-title" content="Dashboards">
+    16→  <meta name="mobile-web-app-capable" content="yes">
+    17→
+    18→  <!-- Fonts -->
+    19→  <link rel="preconnect" href="https://fonts.googleapis.com">
+    20→  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    21→  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    22→
+    23→  <!-- Icons -->
+    24→  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    25→
+    26→  <!-- Styles -->
+    27→  <link rel="stylesheet" href="./css/styles.css?v=20260804">
+    28→  <link rel="stylesheet" href="./css/theme-vivid.css?v=20260804">
+    29→</head>
+    30→<body>
+    31→
+    32→<div class="app">
+    33→
+    34→  <!-- ════════════════════════ TOPBAR ════════════════════════ -->
+    35→  <header class="topbar">
+    36→    <a class="brand" href="#">
+    37→      <div class="brand-mark"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="iaGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#e0f7fa"/><stop offset="30%" stop-color="#80deea"/><stop offset="60%" stop-color="#00bcd4"/><stop offset="100%" stop-color="#0288d1"/></linearGradient></defs><rect x="2" y="8" width="16" height="84" fill="url(#iaGrad)"/><polygon points="21,92 34,92 60,8 47,8" fill="url(#iaGrad)"/><polygon points="85,92 98,92 73,8 60,8" fill="url(#iaGrad)"/></svg></div>
+    38→      <div class="brand-text">
+    39→        <span class="brand-name">Dashboards Studio</span>
+    40→        <span class="brand-sub">RAG · Demo Build</span>
+    41→      </div>
+    42→    </a>
+    43→
+    44→    <div class="topbar-actions">
+    45→      <a class="btn btn--ghost" href="./visuals.html">
+    46→        <i class="fa-solid fa-chart-pie"></i> Visuals
+    47→      </a>
+    48→      <span class="pill pill--ok" id="providerPill">
+    49→        <span class="pill-dot"></span>
+    50→        <span id="providerLabel">Groq · live</span>
+    51→      </span>
+    52→
+    53→    </div>
+    54→  </header>
+    55→
+    56→  <!-- ════════════════════════ SECTION NAV ════════════════════════ -->
+    57→  <nav class="section-nav">
+    58→    <a href="#overview" class="section-nav__item is-active" data-target="overview">
+    59→      <i class="fa-solid fa-gauge-high"></i> Overview
+    60→    </a>
+    61→    <a href="#analytics" class="section-nav__item" data-target="analytics">
+    62→      <i class="fa-solid fa-chart-pie"></i> Analytics
+    63→    </a>
+    64→    <a href="#chat" class="section-nav__item" data-target="chat">
+    65→      <i class="fa-solid fa-robot"></i> Chat
+    66→    </a>
+    67→    <a href="#library" class="section-nav__item" data-target="library">
+    68→      <i class="fa-solid fa-folder-tree"></i> Library
+    69→    </a>
+    70→    <a href="./visuals.html" class="section-nav__item">
+    71→      <i class="fa-solid fa-grip"></i> Visuals Gallery
+    72→    </a>
+    73→    <span class="section-nav__spacer"></span>
+    74→    <span class="section-nav__hint"><kbd>/</kbd> focus chat</span>
+    75→  </nav>
+    76→
+    77→  <!-- ════════════════════════ HERO ════════════════════════ -->
+    78→  <section class="hero hero--compact" id="overview">
+    79→    <canvas class="hero-canvas" id="heroCanvas"></canvas>
+    80→    <div class="hero-content">
+    81→      <div>
+    82→        <span class="hero-eyebrow">
+    83→          <span class="dot"></span>
+    84→          <span>Powered by Groq · Llama 3.3 70B</span>
+    85→        </span>
+    86→        <h1>Ask your documents.<br>Get cited answers.</h1>
+    87→        <p class="lead">
+    88→          A retrieval-augmented chat demo running entirely on static JSON + GitHub Pages.
+    89→          Powered by <strong>Groq</strong> streaming with Llama 3.3 70B — ask questions about
+    90→          your documents and get cited answers in real time.
+    91→        </p>
+    92→        <div class="hero-cta">
+    93→          <a class="btn btn--primary" href="#analytics">
+    94→            <i class="fa-solid fa-chart-pie"></i> See the visuals
+    95→          </a>
+    96→          <a class="btn btn--ghost" href="#chat">
+    97→            <i class="fa-solid fa-comments"></i> Try the chat
+    98→          </a>
+    99→        </div>
+   100→      </div>
+   101→
+   102→      <div class="hero-stats">
+   103→        <div class="hero-stat">
+   104→          <div class="label">Documents</div>
+   105→          <div class="value" id="statDocs">0</div>
+   106→          <div class="delta">+3 this week</div>
+   107→        </div>
+   108→        <div class="hero-stat">
+   109→          <div class="label">Total chunks</div>
+   110→          <div class="value" id="statChunks">0</div>
+   111→          <div class="delta">+248 indexed</div>
+   112→        </div>
+   113→        <div class="hero-stat">
+   114→          <div class="label">Queries run</div>
+   115→          <div class="value" id="statQueries">0</div>
+   116→          <div class="delta">+64 last week</div>
+   117→        </div>
+   118→        <div class="hero-stat">
+   119→          <div class="label">Est. cost</div>
+   120→          <div class="value">$<span id="statCost">0.00</span></div>
+   121→          <div class="delta">Groq free tier</div>
+   122→        </div>
+   123→      </div>
+   124→    </div>
+   125→  </section>
+   126→
+   127→  <!-- ════════════════════════ ANALYTICS (moved up) ════════════════════════ -->
+   128→  <section id="analytics">
+   129→    <h2 class="section-title">
+   130→      <i class="fa-solid fa-chart-pie section-title-icon"></i>
+   131→      Analytics Suite
+   132→      <span class="small">7 live visuals · last 7 days</span>
+   133→    </h2>
+   134→
+   135→    <div class="grid-analytics">
+   136→
+   137→      <div class="chart-card span-3">
+   138→        <div class="chart-head">
+   139→          <span class="chart-title">System Health</span>
+   140→          <span class="chart-value">live</span>
+   141→        </div>
+   142→        <div class="gauge-wrap">
+   143→          <div class="gauge-host" id="chartHealth"></div>
+   144→          <div class="gauge-caption">All services operational</div>
+   145→        </div>
+   146→      </div>
+   147→
+   148→      <div class="chart-card span-3">
+   149→        <div class="chart-head">
+   150→          <span class="chart-title">Avg Match Score</span>
+   151→          <span class="chart-value">retrieval</span>
+   152→        </div>
+   153→        <div class="chart-host" id="chartConfidence"></div>
+   154→      </div>
+   155→
+   156→      <div class="chart-card span-6">
+   157→        <div class="chart-head">
+   158→          <span class="chart-title">Document Types</span>
+   159→          <span class="chart-value">12 docs</span>
+   160→        </div>
+   161→        <div class="chart-host" id="chartDocTypes"></div>
+   162→      </div>
+   163→
+   164→      <div class="chart-card span-6">
+   165→        <div class="chart-head">
+   166→          <span class="chart-title">Uploads — past 7 days</span>
+   167→          <span class="chart-value">+32 files</span>
+   168→        </div>
+   169→        <div class="chart-host" id="chartUploads"></div>
+   170→      </div>
+   171→
+   172→      <div class="chart-card span-6">
+   173→        <div class="chart-head">
+   174→          <span class="chart-title">Query Activity by Hour</span>
+   175→          <span class="chart-value">peak 14:00</span>
+   176→        </div>
+   177→        <div class="chart-host" id="chartHeatmap"></div>
+   178→      </div>
+   179→
+   180→      <div class="chart-card span-6">
+   181→        <div class="chart-head">
+   182→          <span class="chart-title">Chunks per Document</span>
+   183→          <span class="chart-value">top 8</span>
+   184→        </div>
+   185→        <div class="chart-host tall" id="chartChunks"></div>
+   186→      </div>
+   187→
+   188→      <div class="chart-card span-6">
+   189→        <div class="chart-head">
+   190→          <span class="chart-title">Weekly Trend — Queries & Tokens</span>
+   191→          <span class="chart-value">7 weeks</span>
+   192→        </div>
+   193→        <div class="chart-host" id="chartWeekly"></div>
+   194→      </div>
+   195→
+   196→      <div class="chart-card span-6">
+   197→        <div class="chart-head">
+   198→          <span class="chart-title">Model Usage</span>
+   199→          <span class="chart-value">277 reqs</span>
+   200→        </div>
+   201→        <div id="modelUsageLegend" style="display:flex;flex-direction:column;gap:8px;padding:12px 0"></div>
+   202→      </div>
+   203→
+   204→    </div>
+   205→  </section>
+   206→
+   207→  <!-- ════════════════════════ CHAT + LIBRARY ════════════════════════ -->
+   208→  <div class="grid-main" id="library-chat">
+   209→
+   210→    <!-- ─── Chat (left, primary) ─── -->
+   211→    <section class="card card--flush" id="chat">
+   212→      <div class="card-head">
+   213→        <div class="card-title">
+   214→          <i class="fa-solid fa-robot"></i>
+   215→          Ask the docs
+   216→        </div>
+   217→        <div class="card-actions">
+   218→          <button class="btn btn--ghost btn--icon" id="btnClearChat" title="Clear conversation">
+   219→            <i class="fa-solid fa-trash"></i>
+   220→          </button>
+   221→        </div>
+   222→      </div>
+   223→
+   224→      <div class="chat-shell">
+   225→        <div class="chat-messages" id="chatMessages"></div>
+   226→
+   227→        <div style="padding: 0 22px; display:flex; flex-wrap:wrap; gap:6px;">
+   228→          <button class="pill chat-prompt-chip" data-q="What was Q1 2026 total revenue?">Q1 revenue?</button>
+   229→          <button class="pill chat-prompt-chip" data-q="What is the FCR target for customer service?">FCR target?</button>
+   230→          <button class="pill chat-prompt-chip" data-q="How is the AR aging distributed in March 2026?">AR aging?</button>
+   231→          <button class="pill chat-prompt-chip" data-q="What is the Severity 1 incident response target?">Severity 1?</button>
+   232→          <button class="pill chat-prompt-chip" data-q="What is the current phishing click rate?">Phishing rate?</button>
+   233→        </div>
+   234→
+   235→        <div class="chat-composer">
+   236→          <div class="chat-input-row">
+   237→            <textarea class="chat-input" id="chatInput" placeholder="Ask anything about your documents…" rows="1"></textarea>
+   238→            <button class="chat-send" id="chatSend" disabled title="Send">
+   239→              <i class="fa-solid fa-paper-plane"></i>
+   240→            </button>
+   241→          </div>
+   242→          <div class="chat-meta-row">
+   243→            <span><kbd>Enter</kbd> to send · <kbd>Shift+Enter</kbd> for newline · <kbd>/</kbd> to focus</span>
+   244→            <span id="composerStatus">Demo</span>
+   245→          </div>
+   246→        </div>
+   247→      </div>
+   248→    </section>
+   249→
+   250→    <!-- ─── Document Library (right) ─── -->
+   251→    <section class="card" id="library">
+   252→      <div class="card-head">
+   253→        <div class="card-title">
+   254→          <i class="fa-solid fa-folder-tree"></i>
+   255→          Document Library
+   256→        </div>
+   257→        <div class="card-actions">
+   258→          <button class="btn btn--ghost btn--icon" id="btnRefreshDocs" title="Refresh">
+   259→            <i class="fa-solid fa-rotate"></i>
+   260→          </button>
+   261→        </div>
+   262→      </div>
+   263→
+   264→      <div class="dropzone dropzone--compact" id="dropzone">
+   265→        <i class="fa-solid fa-cloud-arrow-up"></i>
+   266→        <div class="dz-title">Drop files or click to upload</div>
+   267→        <div class="dz-hint">PDF · DOCX · XLSX — demo mode simulates chunking</div>
+   268→        <input type="file" id="dropzoneInput" multiple accept=".pdf,.docx,.xlsx,.txt" hidden>
+   269→      </div>
+   270→
+   271→      <ul class="doc-list" id="docList"></ul>
+   272→    </section>
+   273→
+   274→  </div>
+   275→
+   276→  <!-- ════════════════════════ FOOTER ════════════════════════ -->
+   277→  <footer class="footer">
+   278→    <span id="visitorPill" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:12px;border:1px solid rgba(99,102,241,0.20);background:rgba(99,102,241,0.08);font-size:11px;font-weight:700;color:var(--primary,#6366f1);margin-bottom:6px;">
+   279→      <span style="width:6px;height:6px;border-radius:50%;background:#10b981;box-shadow:0 0 6px #10b981;animation:adminPulse 2s ease-in-out infinite;"></span>
+   280→      <span id="visitorCount">—</span>
+   281→    </span>
+   282→    <br>
+   283→    Dashboards Studio · Groq-powered RAG + ECharts dashboards · <code>v1.1.0</code><br>
+   284→    Fork it, drop your <code>.json</code> data in <code>/data</code>, deploy to GitHub Pages.
+   285→  </footer>
+   286→
+   287→</div>
+   288→
+   289→<!-- ════════════════════════ TOAST STACK ════════════════════════ -->
+   290→<div class="toast-stack" id="toastStack"></div>
+   291→
+   292→<!-- ════════════════════════ SCRIPTS ════════════════════════ -->
+   293→<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+   294→<script src="https://cdn.jsdelivr.net/npm/echarts-liquidfill@3/dist/echarts-liquidfill.min.js"></script>
+   295→<script src="./js/api.js?v=20260821"></script>
+   296→<script src="./js/charts.js?v=20260804"></script>
+   297→<script src="./js/app.js?v=20260813"></script>
+   298→
+   299→<script>
+   300→  // Wire secondary hero CTA + utility buttons
+   301→  document.getElementById('btnRefreshDocs').addEventListener('click', () => location.reload());
+   302→  document.getElementById('btnClearChat').addEventListener('click', () => {
+   303→    if (!confirm('Clear conversation?')) return;
+   304→    document.getElementById('chatMessages').innerHTML = '';
+   305→  });
+   306→
+   307→  // Smooth scroll for section nav
+   308→  document.querySelectorAll('.section-nav__item').forEach(link => {
+   309→    link.addEventListener('click', e => {
+   310→      if (!link.dataset.target) return; // external link (e.g. Visuals Gallery) — let it navigate
+   311→      e.preventDefault();
+   312→      const target = document.getElementById(link.dataset.target);
+   313→      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+   314→    });
+   315→  });
+   316→
+   317→  // Active section nav highlight on scroll
+   318→  const sections = ['overview', 'analytics', 'chat', 'library'];
+   319→  const navItems = document.querySelectorAll('.section-nav__item');
+   320→  const observer = new IntersectionObserver(entries => {
+   321→    entries.forEach(entry => {
+   322→      if (entry.isIntersecting) {
+   323→        const id = entry.target.id;
+   324→        navItems.forEach(n => n.classList.toggle('is-active', n.dataset.target === id));
+   325→      }
+   326→    });
+   327→  }, { rootMargin: '-30% 0px -60% 0px' });
+   328→  sections.forEach(id => {
+   329→    const el = document.getElementById(id);
+   330→    if (el) observer.observe(el);
+   331→  });
+   332→
+   333→  // Global "/" shortcut to focus chat input
+   334→  document.addEventListener('keydown', e => {
+   335→    if (e.key === '/' && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
+   336→      e.preventDefault();
+   337→      document.getElementById('chatInput').focus();
+   338→    }
+   339→  });
+   340→</script>
+   341→
+   342→<script src="./js/theme-toggle.js?v=20260804"></script>
+   343→<!-- Pull-to-refresh + service worker -->
+   344→<script src="./js/pull-to-refresh.js?v=20260810"></script>
+   345→<script>
+   346→  if ('serviceWorker' in navigator) {
+   347→    window.addEventListener('load', function() {
+   348→      navigator.serviceWorker.register('./service-worker.js').catch(function() {});
+   349→    });
+   350→  }
+   351→</script>
+   352→
+   353→<!-- ════════════════════════════════════════════════════════════════════════
+   354→     ADMIN GEAR — password-protected visit history viewer
+   355→     ════════════════════════════════════════════════════════════════════════ -->
+   356→<button id="adminGear" title="Admin" style="position:fixed;bottom:14px;left:14px;z-index:9996;width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:var(--muted,#94a3b8);cursor:pointer;display:grid;place-items:center;opacity:0.3;transition:opacity 200ms;">
+   357→  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+   358→</button>
+   359→
+   360→<!-- Password prompt modal -->
+   361→<div id="adminPasswordModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);align-items:center;justify-content:center;">
+   362→  <div style="background:var(--bg,#fff);border:1px solid var(--card-border,rgba(0,0,0,0.1));border-radius:14px;padding:24px;width:320px;max-width:calc(100vw - 32px);box-shadow:0 24px 64px rgba(0,0,0,0.3);">
+   363→    <div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--text,#0f172a);">🔒 Admin Access</div>
+   364→    <input id="adminPasswordInput" type="password" placeholder="Enter password" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--card-border,rgba(0,0,0,0.15));border-radius:8px;font-size:13px;outline:none;margin-bottom:12px;background:var(--bg-soft,rgba(0,0,0,0.03));color:var(--text,#0f172a);">
+   365→    <div style="display:flex;gap:8px;">
+   366→      <button id="adminPasswordSubmit" style="flex:1;padding:8px;border:0;border-radius:8px;background:linear-gradient(135deg,var(--primary,#6366f1),var(--accent,#06b6d4));color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Enter</button>
+   367→      <button id="adminPasswordCancel" style="padding:8px 14px;border:1px solid var(--card-border,rgba(0,0,0,0.15));border-radius:8px;background:transparent;color:var(--text-soft,#64748b);font-size:12px;cursor:pointer;">Cancel</button>
+   368→    </div>
+   369→    <div id="adminPasswordError" style="color:var(--danger,#ef4444);font-size:11px;margin-top:8px;display:none;">Wrong password</div>
+   370→  </div>
+   371→</div>
+   372→
+   373→<!-- Visit history viewer (full-screen overlay, auto-polling) -->
+   374→<div id="adminVisitPanel" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg,#f8fafc);overflow-y:auto;">
+   375→  <div style="max-width:1100px;margin:0 auto;padding:20px;">
+   376→    <!-- Header with live indicator + close -->
+   377→    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+   378→      <div style="display:flex;align-items:center;gap:10px;">
+   379→        <span style="width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981;animation:adminPulse 2s ease-in-out infinite;"></span>
+   380→        <span style="font-size:16px;font-weight:700;color:var(--text,#0f172a);">Live Visitor Feed</span>
+   381→        <span id="statUpdated" style="font-size:10px;color:var(--muted,#94a3b8);"></span>
+   382→      </div>
+   383→      <button id="adminCloseBtn" style="padding:6px 14px;border:1px solid var(--card-border,rgba(0,0,0,0.15));border-radius:8px;background:transparent;color:var(--text-soft,#64748b);font-size:12px;cursor:pointer;">✕ Close</button>
+   384→    </div>
+   385→    <style>@keyframes adminPulse{0%,100%{opacity:0.7;transform:scale(1)}50%{opacity:1;transform:scale(1.3)}}</style>
+   386→
+   387→    <!-- Summary cards -->
+   388→    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
+   389→      <div style="padding:16px 20px;border-radius:12px;border:1px solid rgba(99,102,241,0.15);background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(6,182,212,0.04));">
+   390→        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted,#94a3b8);margin-bottom:4px;">Total Visits</div>
+   391→        <div id="statTotal" style="font-size:28px;font-weight:800;color:var(--text,#0f172a);line-height:1;">—</div>
+   392→      </div>
+   393→      <div style="padding:16px 20px;border-radius:12px;border:1px solid rgba(16,185,129,0.15);background:linear-gradient(135deg,rgba(16,185,129,0.06),rgba(34,197,94,0.04));">
+   394→        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted,#94a3b8);margin-bottom:4px;">Distinct IPs</div>
+   395→        <div id="statIPs" style="font-size:28px;font-weight:800;color:#10b981;line-height:1;">—</div>
+   396→      </div>
+   397→      <div style="padding:16px 20px;border-radius:12px;border:1px solid rgba(245,158,11,0.15);background:linear-gradient(135deg,rgba(245,158,11,0.06),rgba(239,68,68,0.04));">
+   398→        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted,#94a3b8);margin-bottom:4px;">Distinct OS</div>
+   399→        <div id="statDevices" style="font-size:28px;font-weight:800;color:#f59e0b;line-height:1;">—</div>
+   400→      </div>
+   401→    </div>
+   402→
+   403→    <!-- Visit table -->
+   404→    <div id="adminVisitTable"></div>
+   405→    <div id="adminVisitError" style="color:var(--danger,#ef4444);font-size:12px;display:none;"></div>
+   406→  </div>
+   407→</div>
+   408→
+   409→<script>
+   410→// Beacon: log this visit on page load (includes page path)
+   411→new Image().src = 'https://dashboards-groq-proxy.netlify.app/groq-proxy?op=beacon&page=' + encodeURIComponent(window.location.pathname.replace(/^\/dashboards\/?/, '') || 'index.html') + '&cb=' + Date.now();
+   412→
+   413→// Footer pill: just the number (cumulative distinct device types — no label, no tooltip)
+   414→fetch('https://dashboards-groq-proxy.netlify.app/groq-proxy?op=stats', { headers: { 'Origin': 'https://insightanalyticsca.github.io' } })
+   415→  .then(function(r) { return r.json(); })
+   416→  .then(function(d) {
+   417→    var el = document.getElementById('visitorCount');
+   418→    if (el) el.textContent = d.devices || 0;
+   419→  })
+   420→  .catch(function() {});
+   421→
+   422→// ─── Parse user-agent into short "Browser · OS" string ─────────────────────
+   423→function parseDevice(ua) {
+   424→  if (!ua || ua === 'unknown') return 'unknown';
+   425→  var browser = 'Other';
+   426→  if (ua.indexOf('Edg/') >= 0) browser = 'Edge';
+   427→  else if (ua.indexOf('OPR/') >= 0) browser = 'Opera';
+   428→  else if (ua.indexOf('Chrome/') >= 0) browser = 'Chrome';
+   429→  else if (ua.indexOf('Firefox/') >= 0) browser = 'Firefox';
+   430→  else if (ua.indexOf('Safari/') >= 0 && ua.indexOf('Chrome/') < 0) browser = 'Safari';
+   431→  else if (ua.indexOf('curl') >= 0 || ua.indexOf('python') >= 0) browser = 'Bot';
+   432→  var os = 'Other';
+   433→  if (ua.indexOf('iPhone') >= 0) os = 'iPhone';
+   434→  else if (ua.indexOf('iPad') >= 0) os = 'iPad';
+   435→  else if (ua.indexOf('Android') >= 0) os = 'Android';
+   436→  else if (ua.indexOf('Mac OS') >= 0 || ua.indexOf('Macintosh') >= 0) os = 'macOS';
+   437→  else if (ua.indexOf('Windows') >= 0) os = 'Windows';
+   438→  else if (ua.indexOf('Linux') >= 0) os = 'Linux';
+   439→  return browser + ' · ' + os;
+   440→}
+   441→
+   442→// Parse just the OS (strips browser — same device diff browser = same OS)
+   443→function parseDeviceOS(ua) {
+   444→  if (!ua || ua === 'unknown') return 'unknown';
+   445→  if (ua.indexOf('iPhone') >= 0) return 'iPhone';
+   446→  if (ua.indexOf('iPad') >= 0) return 'iPad';
+   447→  if (ua.indexOf('Android') >= 0) return 'Android';
+   448→  if (ua.indexOf('Mac OS') >= 0 || ua.indexOf('Macintosh') >= 0) return 'macOS';
+   449→  if (ua.indexOf('Windows') >= 0) return 'Windows';
+   450→  if (ua.indexOf('Linux') >= 0) return 'Linux';
+   451→  return 'Other';
+   452→}
+   453→
+   454→// ─── Admin gear + password + auto-polling visit feed ───────────────────────
+   455→(function() {
+   456→  var PROXY = 'https://dashboards-groq-proxy.netlify.app/groq-proxy';
+   457→  var POLL_MS = 5000;
+   458→  var gear = document.getElementById('adminGear');
+   459→  var pwdModal = document.getElementById('adminPasswordModal');
+   460→  var pwdInput = document.getElementById('adminPasswordInput');
+   461→  var pwdSubmit = document.getElementById('adminPasswordSubmit');
+   462→  var pwdCancel = document.getElementById('adminPasswordCancel');
+   463→  var pwdError = document.getElementById('adminPasswordError');
+   464→  var visitPanel = document.getElementById('adminVisitPanel');
+   465→  var visitTable = document.getElementById('adminVisitTable');
+   466→  var visitError = document.getElementById('adminVisitError');
+   467→  var closeBtn = document.getElementById('adminCloseBtn');
+   468→  var pollTimer = null;
+   469→  var adminPwd = null;
+   470→
+   471→  gear.addEventListener('mouseenter', function() { gear.style.opacity = '0.6'; });
+   472→  gear.addEventListener('mouseleave', function() { gear.style.opacity = '0.3'; });
+   473→  gear.addEventListener('click', function() {
+   474→    pwdModal.style.display = 'flex';
+   475→    pwdInput.value = '';
+   476→    pwdError.style.display = 'none';
+   477→    setTimeout(function() { pwdInput.focus(); }, 100);
+   478→  });
+   479→
+   480→  function closePwd() { pwdModal.style.display = 'none'; }
+   481→  pwdCancel.addEventListener('click', closePwd);
+   482→  pwdModal.addEventListener('click', function(e) { if (e.target === pwdModal) closePwd(); });
+   483→
+   484→  function fetchVisits() {
+   485→    var url = PROXY + '?op=visits&password=' + encodeURIComponent(adminPwd);
+   486→    fetch(url, { headers: { 'Origin': 'https://insightanalyticsca.github.io' } })
+   487→      .then(function(r) { return r.status === 403 ? null : r.json(); })
+   488→      .then(function(data) {
+   489→        if (!data) { stopPolling(); visitPanel.style.display = 'none'; return; }
+   490→        renderVisits(data);
+   491→      })
+   492→      .catch(function() { /* silent retry on next poll */ });
+   493→  }
+   494→
+   495→  function renderVisits(data) {
+   496→    // Parse + enrich each visit with device (OS only — not Browser·OS, so same device with diff browser = 1)
+   497→    var visits = data.visits.map(function(v) {
+   498→      return {
+   499→        ts: v.ts ? new Date(v.ts).getTime() : 0,
+   500→        tsLabel: v.ts ? new Date(v.ts).toLocaleTimeString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—',
+   501→        ip: v.ip || 'unknown',
+   502→        loc: (v.city && v.city !== 'unknown' ? v.city + ', ' : '') + (v.country || 'unknown'),
+   503→        page: v.page || '—',
+   504→        device: parseDevice(v.ua),  // Browser · OS (for the table display)
+   505→        os: parseDeviceOS(v.ua)    // OS only (for the distinct-device count)
+   506→      };
+   507→    });
+   508→
+   509→    // ─── Group: same device (IP + browser/OS) + same page within 5 min ─────
+   510→    var SESSION_MS = 5 * 60 * 1000;
+   511→    // Build groups keyed by ip||device||page → sorted visit arrays
+   512→    var groups = {};
+   513→    visits.forEach(function(v) {
+   514→      var key = v.ip + '|' + v.device + '|' + v.page;
+   515→      if (!groups[key]) groups[key] = [];
+   516→      groups[key].push(v);
+   517→    });
+   518→    // Within each group, sort by timestamp, then split into sessions (5-min window)
+   519→    var sessions = [];
+   520→    Object.keys(groups).forEach(function(key) {
+   521→      var arr = groups[key].sort(function(a, b) { return b.ts - a.ts; }); // newest first
+   522→      var current = null;
+   523→      arr.forEach(function(v) {
+   524→        if (current && (current.ts - v.ts) <= SESSION_MS) {
+   525→          // Same session — add to current group
+   526→          current.reloads++;
+   527→          current.lastTs = v.ts;
+   528→          current.lastLabel = v.tsLabel;
+   529→        } else {
+   530→          // New session
+   531→          if (current) sessions.push(current);
+   532→          current = {
+   533→            ts: v.ts, tsLabel: v.tsLabel,
+   534→            ip: v.ip, loc: v.loc, page: v.page, device: v.device,
+   535→            reloads: 1,
+   536→            lastTs: v.ts, lastLabel: v.tsLabel
+   537→          };
+   538→        }
+   539→      });
+   540→      if (current) sessions.push(current);
+   541→    });
+   542→    // Sort sessions newest-first
+   543→    sessions.sort(function(a, b) { return b.ts - a.ts; });
+   544→
+   545→    // Compute distinct IPs + devices from the RAW visit log (not deduped)
+   546→    var ipMap = {};
+   547→    var devMap = {};
+   548→    visits.forEach(function(v) {
+   549→      ipMap[v.ip] = (ipMap[v.ip] || 0) + 1;
+   550→      devMap[v.os] = (devMap[v.os] || 0) + 1;
+   551→    });
+   552→
+   553→    // Update summary cards — use the SAME recent visit log as the table
+   554→    // (not the cumulative blob) so cards match the table.
+   555→    // Show the cumulative (all-time) count as a separate footnote.
+   556→    var cum = data.cumulative || {};
+   557→    var recentIPs = Object.keys(ipMap).length;
+   558→    var recentDevices = Object.keys(devMap).length;
+   559→    var recentTotal = visits.length;
+   560→    document.getElementById('statTotal').textContent = recentTotal;
+   561→    document.getElementById('statIPs').textContent = recentIPs;
+   562→    document.getElementById('statDevices').textContent = recentDevices;
+   563→    document.getElementById('statUpdated').textContent = '· ' + new Date().toLocaleTimeString() +
+   564→      ' · all-time: ' + (cum.totalVisits || 0) + ' visits, ' + (cum.distinctIPs || 0) + ' IPs, ' + (cum.distinctDevices || 0) + ' devices';
+   565→
+   566→    // Device breakdown — from the same recent visit log as the table above
+   567→    var breakdownHTML = '<div style="margin-top:16px;padding:14px;border-radius:12px;border:1px solid var(--card-border,rgba(0,0,0,0.10));background:rgba(99,102,241,0.03);">';
+   568→    breakdownHTML += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted,#94a3b8);margin-bottom:8px;">Recent visitors (IP + OS) — ' + recentIPs + ' unique since last deploy</div>';
+   569→    // Build IP+OS groups from the recent visit log (best available without edge function redeploy)
+   570→    var allVisits = data.visits || [];
+   571→    var ipOsMap = {};
+   572→    allVisits.forEach(function(v) {
+   573→      var ip = v.ip || 'unknown';
+   574→      var os = parseDeviceOS(v.ua || '');
+   575→      var key = ip + '|' + os;
+   576→      if (!ipOsMap[key]) ipOsMap[key] = { ip: ip, os: os, count: 0, lastTs: '', country: v.country || '' };
+   577→      ipOsMap[key].count++;
+   578→      if (v.ts > ipOsMap[key].lastTs) {
+   579→        ipOsMap[key].lastTs = v.ts;
+   580→        ipOsMap[key].country = v.country || '';
+   581→      }
+   582→    });
+   583→    var ipOsEntries = Object.values(ipOsMap).sort(function(a, b) { return b.count - a.count; });
+   584→    ipOsEntries.forEach(function(e) {
+   585→      var time = e.lastTs ? new Date(e.lastTs).toLocaleDateString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+   586→      breakdownHTML += '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(0,0,0,0.03);line-height:1.4;font-size:11px;">';
+   587→      breakdownHTML += '<span style="font-family:monospace;font-weight:600;color:var(--text,#0f172a);">' + e.ip + '</span>';
+   588→      breakdownHTML += '<span style="color:var(--text-soft,#475569);">' + e.os + '</span>';
+   589→      breakdownHTML += '<span style="font-weight:700;color:#f59e0b;">' + e.count + '×</span>';
+   590→      breakdownHTML += '<span style="color:var(--text-soft,#475569);font-size:10px;white-space:nowrap;">' + (e.country || '?') + ' · ' + time + '</span>';
+   591→      breakdownHTML += '</div>';
+   592→    });
+   593→    breakdownHTML += '<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(0,0,0,0.06);font-size:10px;color:var(--muted,#94a3b8);">';
+   594→    breakdownHTML += 'All history (cumulative): ' + (cum.totalVisits || 0) + ' visits · ' + (cum.distinctIPs || 0) + ' unique IPs · ' + (cum.distinctDevices || 0) + ' device types';
+   595→    breakdownHTML += '<br>Note: detailed table only shows visits since last edge function deploy. Cumulative counts persist across deploys via Netlify Blobs.';
+   596→    breakdownHTML += '</div></div>';
+   597→
+   598→    // Render deduped table + device breakdown
+   599→    var html = '<div style="overflow-x:auto;border:1px solid var(--card-border,rgba(0,0,0,0.12));border-radius:10px;">';
+   600→    html += '<table style="border-collapse:collapse;font-size:11px;width:100%;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">';
+   601→    html += '<thead><tr style="background:rgba(99,102,241,0.06);border-bottom:2px solid var(--card-border,rgba(0,0,0,0.12));color:var(--muted,#94a3b8);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;font-size:9px;">';
+   602→    html += '<th style="padding:10px 14px;text-align:left;white-space:nowrap;">When</th>';
+   603→    html += '<th style="padding:10px 14px;text-align:left;white-space:nowrap;">IP</th>';
+   604→    html += '<th style="padding:10px 14px;text-align:left;white-space:nowrap;">From</th>';
+   605→    html += '<th style="padding:10px 14px;text-align:left;white-space:nowrap;">Page</th>';
+   606→    html += '<th style="padding:10px 14px;text-align:left;white-space:nowrap;">Device</th>';
+   607→    html += '<th style="padding:10px 14px;text-align:center;white-space:nowrap;">Reloads</th>';
+   608→    html += '</tr></thead><tbody>';
+   609→    sessions.forEach(function(s, i) {
+   610→      var bg = i % 2 === 0 ? 'transparent' : 'rgba(99,102,241,0.025)';
+   611→      html += '<tr style="border-bottom:1px solid rgba(0,0,0,0.04);background:' + bg + ';">';
+   612→      html += '<td style="padding:7px 14px;white-space:nowrap;color:var(--text,#0f172a);font-weight:600;">' + s.tsLabel + '</td>';
+   613→      html += '<td style="padding:7px 14px;white-space:nowrap;font-family:monospace;color:var(--text-soft,#475569);">' + (s.ip || '—') + '</td>';
+   614→      html += '<td style="padding:7px 14px;white-space:nowrap;color:var(--text-soft,#475569);">' + (s.loc || '—') + '</td>';
+   615→      html += '<td style="padding:7px 14px;white-space:nowrap;color:var(--primary,#6366f1);font-weight:500;">' + (s.page || '—') + '</td>';
+   616→      html += '<td style="padding:7px 14px;white-space:nowrap;color:var(--muted,#94a3b8);">' + s.device + '</td>';
+   617→      var reloadStyle = s.reloads > 1 ? 'color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.08);border-radius:12px;padding:2px 8px;display:inline-block;' : 'color:var(--muted,#94a3b8);';
+   618→      var reloadText = s.reloads > 1 ? s.reloads + '×' : '1';
+   619→      html += '<td style="padding:7px 14px;text-align:center;white-space:nowrap;"><span style="' + reloadStyle + '">' + reloadText + '</span></td>';
+   620→      html += '</tr>';
+   621→    });
+   622→    html += '</tbody></table></div>';
+   623→    html += breakdownHTML;
+   624→    visitTable.innerHTML = html;
+   625→    visitError.style.display = 'none';
+   626→  }
+   627→
+   628→  function startPolling(pwd) {
+   629→    adminPwd = pwd;
+   630→    fetchVisits();
+   631→    pollTimer = setInterval(fetchVisits, POLL_MS);
+   632→  }
+   633→
+   634→  function stopPolling() {
+   635→    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+   636→    adminPwd = null;
+   637→  }
+   638→
+   639→  pwdSubmit.addEventListener('click', function() {
+   640→    var pwd = pwdInput.value;
+   641→    if (!pwd) { pwdError.textContent = 'Enter password'; pwdError.style.display = 'block'; return; }
+   642→    // Quick auth check
+   643→    var url = PROXY + '?op=visits&password=' + encodeURIComponent(pwd);
+   644→    fetch(url, { headers: { 'Origin': 'https://insightanalyticsca.github.io' } })
+   645→      .then(function(r) {
+   646→        if (r.status === 403) { pwdError.textContent = 'Wrong password'; pwdError.style.display = 'block'; return null; }
+   647→        return r.json();
+   648→      })
+   649→      .then(function(data) {
+   650→        if (!data) return;
+   651→        closePwd();
+   652→        visitPanel.style.display = 'block';
+   653→        renderVisits(data);
+   654→        startPolling(pwd);
+   655→      })
+   656→      .catch(function(e) {
+   657→        pwdError.textContent = 'Error: ' + e.message;
+   658→        pwdError.style.display = 'block';
+   659→      });
+   660→  });
+   661→
+   662→  pwdInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') pwdSubmit.click(); });
+   663→  closeBtn.addEventListener('click', function() { visitPanel.style.display = 'none'; stopPolling(); });
+   664→})();
+   665→</script>
+   666→</body>
+   667→</html>
+   668→
