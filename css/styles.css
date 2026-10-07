@@ -130,6 +130,15 @@ a:hover { color: var(--primary-soft); }
   text-decoration: none;
   color: var(--text);
 }
+.brand-mark-link, .brand-text-link {
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+.brand-mark-link { flex-shrink: 0; }
+.brand-text-link:hover .brand-name { color: var(--accent, #6366f1); }
+.brand-mark-link:hover { opacity: 0.85; }
 
 .brand-mark {
   width: 28px;
