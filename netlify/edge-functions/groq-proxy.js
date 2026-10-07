@@ -390,6 +390,50 @@ export default async (request, context) => {
       });
     }
 
+    // op=devices — admin endpoint, returns full unique device + IP maps
+    // across ALL history (not just 72h). Shows which specific devices/IPs
+    // visited and how many times. Cumulative stats persist via Netlify Blobs.
+    if (op === 'devices') {
+      const pwd = url.searchParams.get('password') || url.searchParams.get('pwd') || '';
+      if (pwd !== ADMIN_PASSWORD) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+        });
+      }
+      // Ensure cumulative is loaded from blob
+      if (!blobLoaded) {
+        await readCumulative();
+      }
+      // Write pending stats
+      if (blobWritesPending > 0 && blobLoaded) {
+        blobWritesPending = 0;
+        writeCumulative();
+      }
+      // Build device list sorted by visit count descending
+      const deviceList = Object.entries(cumulative.devices || {})
+        .map(([device, count]) => ({ device, visits: count }))
+        .sort((a, b) => b.visits - a.visits);
+      // Build IP list sorted by visit count (mask last octet for privacy)
+      const ipList = Object.entries(cumulative.ips || {})
+        .map(([ip, count]) => ({
+          ip: ip.replace(/(\d+\.\d+\.\d+)\.\d+/, '$1.xxx'),
+          visits: count
+        }))
+        .sort((a, b) => b.visits - a.visits);
+      return new Response(JSON.stringify({
+        totalVisits: cumulative.totalVisits || 0,
+        distinctDevices: deviceList.length,
+        distinctIPs: ipList.length,
+        devices: deviceList,
+        ips: ipList,
+        capturedAt: new Date().toISOString()
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+      });
+    }
+
     // op=visits — admin endpoint, requires password
     if (op === 'visits') {
       const pwd = url.searchParams.get('password') || url.searchParams.get('pwd') || '';
