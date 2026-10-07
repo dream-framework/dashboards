@@ -453,7 +453,13 @@ function parseDeviceOS(ua) {
 
 // ─── Admin gear + password + auto-polling visit feed ───────────────────────
 (function() {
-  var PROXY = 'https://startling-belekoy-b0ec70.netlify.app/groq-proxy';
+  var PROXY = 'https://dashboards-groq-proxy.netlify.app/groq-proxy';
+  // The old site (dashboards-groq-proxy) has 733 visits of history but
+  // doesn't have the op=devices endpoint. The new site (startling-belekoy)
+  // has the endpoint but started fresh. Use the old site for beacon/stats/
+  // visits (which have the full history), and the new site ONLY for the
+  // unique-devices detail table.
+  var PROXY_DEVICES = 'https://startling-belekoy-b0ec70.netlify.app/groq-proxy';
   var POLL_MS = 5000;
   var gear = document.getElementById('adminGear');
   var pwdModal = document.getElementById('adminPasswordModal');
@@ -490,8 +496,10 @@ function parseDeviceOS(ua) {
         renderVisits(data);
       })
       .catch(function() { /* silent retry on next poll */ });
-    // Also fetch the full unique device/IP history (all-time, not just 72h)
-    var devUrl = PROXY + '?op=devices&password=' + encodeURIComponent(adminPwd);
+    // Also fetch the full unique device/IP history from the NEW site
+    // (which has the op=devices endpoint). The old site has 733 visits of
+    // cumulative history but doesn't expose the detail endpoint.
+    var devUrl = PROXY_DEVICES + '?op=devices&password=' + encodeURIComponent(adminPwd);
     fetch(devUrl, { headers: { 'Origin': 'https://insightanalyticsca.github.io' } })
       .then(function(r) { return r.status === 403 ? null : r.json(); })
       .then(function(d) {
