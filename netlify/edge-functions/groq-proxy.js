@@ -434,7 +434,10 @@ export default async (request, context) => {
         cumulative: {
           totalVisits: cumulative.totalVisits || 0,
           distinctIPs: Object.keys(cumulative.ips || {}).length,
-          distinctDevices: Object.keys(cumulative.devices || {}).length
+          distinctDevices: Object.keys(cumulative.devices || {}).length,
+          // Return the full maps so the client can render an all-history table
+          ipCounts: cumulative.ips || {},
+          deviceCounts: cumulative.devices || {}
         },
         edge: context.geo?.country?.name || 'unknown',
         capturedAt: new Date().toISOString()
