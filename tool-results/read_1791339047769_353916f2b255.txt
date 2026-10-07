@@ -1,0 +1,502 @@
+   400→   400→    },
+   401→   401→    {
+   402→   402→      key: 'invoices', name: 'Invoice Aging', icon: 'fa-file-invoice-dollar',
+   403→   403→      rowCount: 40, columns: ['invoice_id','customer','issue_date','due_date','amount','days_outstanding','status'],
+   404→   404→      generate: genInvoiceAging
+   405→   405→    },
+   406→   406→    {
+   407→   407→      // PDF sample — fetched + parsed by pdf.js at click time (no inline data).
+   408→   408→      // The PDF lives at /data/sample-sales-report.pdf (committed to the repo)
+   409→   409→      // and contains a 30-row Q3 2026 regional sales report laid out as a real
+   410→   410→      // table widget so pdf.js's text extraction + the demo's detectPDFTable()
+   411→   411→      // heuristic produce clean rows. Lets users try the full NL → pipeline →
+   412→   412→      // execute → email flow on a PDF (not just Excel).
+   413→   413→      key: 'pdf', name: 'Sales Report (PDF)', icon: 'fa-file-pdf',
+   414→   414→      rowCount: 30, columns: ['Date','Region','Product','Qty','Revenue','Channel'],
+   415→   415→      isPDF: true,
+   416→   416→      url: '/data/sample-sales-report.pdf'
+   417→   417→    }
+   418→   418→  ];
+   419→   419→
+   420→   420→  // ─── Unified document object factory ────────────────────────────────────────
+   421→   421→  function makeDoc(opts) {
+   422→   422→    var columns = opts.columns || (opts.rows && opts.rows.length ? Object.keys(opts.rows[0]) : []);
+   423→   423→    return {
+   424→   424→      type:       opts.type,
+   425→   425→      name:       opts.name || 'untitled',
+   426→   426→      fileSize:   opts.fileSize || 0,
+   427→   427→      rows:       opts.rows || [],
+   428→   428→      columns:    columns,
+   429→   429→      rawText:    opts.rawText || '',
+   430→   430→      rowCount:   (opts.rows || []).length,
+   431→   431→      columnCount: columns.length,
+   432→   432→      warnings:   opts.warnings || []
+   433→   433→    };
+   434→   434→  }
+   435→   435→
+   436→   436→  // ─── File parsers ───────────────────────────────────────────────────────────
+   437→   437→  // Each returns a unified doc object. All async, all try/catch — failures throw
+   438→   438→  // a friendly error that the caller surfaces as an inline error card.
+   439→   439→
+   440→   440→  // CSV — native parse, no library. Handles quoted fields with embedded commas,
+   441→   441→  // newlines, and doubled-quote escapes (RFC 4180).
+   442→   442→  function parseCSV(file) {
+   443→   443→    return new Promise(function (resolve, reject) {
+   444→   444→      var reader = new FileReader();
+   445→   445→      reader.onerror = function () { reject(new Error('Couldn\u2019t read this file.')); };
+   446→   446→      reader.onload = function () {
+   447→   447→        try {
+   448→   448→          var text = reader.result;
+   449→   449→          var rows = csvToRows(text);
+   450→   450→          if (!rows.length) {
+   451→   451→            reject(new Error('Couldn\u2019t parse this CSV — the file appears to be empty.'));
+   452→   452→            return;
+   453→   453→          }
+   454→   454→          resolve(makeDoc({
+   455→   455→            type: 'csv', name: file.name, fileSize: file.size,
+   456→   456→            rows: rows.rows, columns: rows.columns, rawText: ''
+   457→   457→          }));
+   458→   458→        } catch (e) {
+   459→   459→          reject(new Error('Couldn\u2019t parse this CSV. Make sure it\u2019s a valid .csv and try again.'));
+   460→   460→        }
+   461→   461→      };
+   462→   462→      reader.readAsText(file);
+   463→   463→    });
+   464→   464→  }
+   465→   465→  // Minimal RFC-4180 CSV parser → { rows: [{...}], columns: [...] }
+   466→   466→  function csvToRows(text) {
+   467→   467→    var records = [];
+   468→   468→    var field = '';
+   469→   469→    var row = [];
+   470→   470→    var i = 0;
+   471→   471→    var inQuotes = false;
+   472→   472→    while (i < text.length) {
+   473→   473→      var c = text[i];
+   474→   474→      if (inQuotes) {
+   475→   475→        if (c === '"') {
+   476→   476→          if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+   477→   477→          inQuotes = false; i++; continue;
+   478→   478→        }
+   479→   479→        field += c; i++; continue;
+   480→   480→      }
+   481→   481→      if (c === '"') { inQuotes = true; i++; continue; }
+   482→   482→      if (c === ',') { row.push(field); field = ''; i++; continue; }
+   483→   483→      if (c === '\r') { i++; continue; }
+   484→   484→      if (c === '\n') { row.push(field); records.push(row); row = []; field = ''; i++; continue; }
+   485→   485→      field += c; i++;
+   486→   486→    }
+   487→   487→    if (field.length || row.length) { row.push(field); records.push(row); }
+   488→   488→    if (!records.length) return { rows: [], columns: [] };
+   489→   489→    var headers = records[0].map(function (h, idx) { return h || ('col_' + (idx + 1)); });
+   490→   490→    var objRows = records.slice(1).filter(function (r) {
+   491→   491→      return r.some(function (v) { return v !== '' && v != null; });
+   492→   492→    }).map(function (r) {
+   493→   493→      var o = {};
+   494→   494→      headers.forEach(function (h, idx) {
+   495→   495→        var v = r[idx];
+   496→   496→        // Auto-coerce numeric strings — keeps summarize/sort working.
+   497→   497→        if (v != null && v !== '' && !isNaN(v) && /^-?\d+(\.\d+)?$/.test(v.trim())) o[h] = Number(v);
+   498→   498→        else o[h] = v != null ? v : '';
+   499→   499→      });
+   500→   500→      return o;
+   501→   501→    });
+   502→   502→    return { rows: objRows, columns: headers };
+   503→   503→  }
+   504→   504→
+   505→   505→  // Excel (.xlsx/.xls) via SheetJS. Loaded lazily on first parse.
+   506→   506→  function parseExcel(file) {
+   507→   507→    return loadScript('xlsx').then(function () {
+   508→   508→      return new Promise(function (resolve, reject) {
+   509→   509→        var reader = new FileReader();
+   510→   510→        reader.onerror = function () { reject(new Error('Couldn\u2019t read this Excel file.')); };
+   511→   511→        reader.onload = function () {
+   512→   512→          try {
+   513→   513→            var wb = XLSX.read(reader.result, { type: 'array' });
+   514→   514→            var warnings = [];
+   515→   515→            if (wb.SheetNames.length > 1) {
+   516→   516→              warnings.push('Detected ' + wb.SheetNames.length + ' sheets — using the first ("' + wb.SheetNames[0] + '").');
+   517→   517→            }
+   518→   518→            var sheet = wb.Sheets[wb.SheetNames[0]];
+   519→   519→            var aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
+   520→   520→            if (!aoa.length) {
+   521→   521→              reject(new Error('This Excel file has no rows in its first sheet.'));
+   522→   522→              return;
+   523→   523→            }
+   524→   524→            var headers = aoa[0].map(function (h, idx) { return h != null && h !== '' ? String(h) : 'col_' + (idx + 1); });
+   525→   525→            var rows = aoa.slice(1).filter(function (r) {
+   526→   526→              return r.some(function (v) { return v !== '' && v != null; });
+   527→   527→            }).map(function (r) {
+   528→   528→              var o = {};
+   529→   529→              headers.forEach(function (h, idx) { o[h] = r[idx] != null ? r[idx] : ''; });
+   530→   530→              return o;
+   531→   531→            });
+   532→   532→            resolve(makeDoc({
+   533→   533→              type: 'excel', name: file.name, fileSize: file.size,
+   534→   534→              rows: rows, columns: headers, warnings: warnings
+   535→   535→            }));
+   536→   536→          } catch (e) {
+   537→   537→            reject(new Error('Couldn\u2019t parse this Excel file. Make sure it\u2019s a valid .xlsx/.xls and try again.'));
+   538→   538→          }
+   539→   539→        };
+   540→   540→        reader.readAsArrayBuffer(file);
+   541→   541→      });
+   542→   542→    });
+   543→   543→  }
+   544→   544→
+   545→   545→  // Word (.docx) via mammoth. Extract raw text + try to parse the first HTML
+   546→   546→  // <table> for tabular data. If no table found, treat as text-only doc.
+   547→   547→  function parseWord(file) {
+   548→   548→    return loadScript('mammoth').then(function () {
+   549→   549→      return new Promise(function (resolve, reject) {
+   550→   550→        var reader = new FileReader();
+   551→   551→        reader.onerror = function () { reject(new Error('Couldn\u2019t read this Word file.')); };
+   552→   552→        reader.onload = function () {
+   553→   553→          var ab = reader.result;
+   554→   554→          // extractRawText + convertToHtml in parallel.
+   555→   555→          Promise.all([
+   556→   556→            mammoth.extractRawText({ arrayBuffer: ab }).promise ||
+   557→   557→              mammoth.extractRawText({ arrayBuffer: ab }),
+   558→   558→            mammoth.convertToHtml({ arrayBuffer: ab }).promise ||
+   559→   559→              mammoth.convertToHtml({ arrayBuffer: ab })
+   560→   560→          ]).then(function (results) {
+   561→   561→            var rawText = (results[0] && results[0].value) || '';
+   562→   562→            var html    = (results[1] && results[1].value) || '';
+   563→   563→            var warnings = [];
+   564→   564→            var parsed = parseFirstHtmlTable(html);
+   565→   565→            if (parsed.rows.length) {
+   566→   566→              if (rawText) warnings.push('Document contains a table — using its rows as the dataset. Other text ignored for pipeline operations.');
+   567→   567→              resolve(makeDoc({
+   568→   568→                type: 'word', name: file.name, fileSize: file.size,
+   569→   569→                rows: parsed.rows, columns: parsed.columns, rawText: rawText, warnings: warnings
+   570→   570→              }));
+   571→   571→            } else {
+   572→   572→              warnings.push('No tables detected — this document is text-only. Pipeline steps that need rows (filter/summarize/sort) will return empty results, but the AI can still analyze the text.');
+   573→   573→              resolve(makeDoc({
+   574→   574→                type: 'word', name: file.name, fileSize: file.size,
+   575→   575→                rows: [], columns: [], rawText: rawText, warnings: warnings
+   576→   576→              }));
+   577→   577→            }
+   578→   578→          }).catch(function () {
+   579→   579→            reject(new Error('Couldn\u2019t parse this Word file. Make sure it\u2019s a valid .docx (legacy .doc is not supported) and try again.'));
+   580→   580→          });
+   581→   581→        };
+   582→   582→        reader.readAsArrayBuffer(file);
+   583→   583→      });
+   584→   584→    });
+   585→   585→  }
+   586→   586→  // Parse the first <table> in an HTML string into { rows, columns }.
+   587→   587→  function parseFirstHtmlTable(html) {
+   588→   588→    if (!html) return { rows: [], columns: [] };
+   589→   589→    var tmp = document.createElement('div');
+   590→   590→    tmp.innerHTML = html;
+   591→   591→    var table = tmp.querySelector('table');
+   592→   592→    if (!table) return { rows: [], columns: [] };
+   593→   593→    var trs = table.querySelectorAll('tr');
+   594→   594→    if (!trs.length) return { rows: [], columns: [] };
+   595→   595→    var headers = [];
+   596→   596→    var firstCells = trs[0].querySelectorAll('th,td');
+   597→   597→    firstCells.forEach(function (c, idx) { headers.push((c.textContent || '').trim() || 'col_' + (idx + 1)); });
+   598→   598→    // If first row has <th>, treat it as header; otherwise the first row is data.
+   599→   599→    var startIdx = trs[0].querySelector('th') ? 1 : 0;
+   600→   600→    var rows = [];
+   601→   601→    for (var i = startIdx; i < trs.length; i++) {
+   602→   602→      var cells = trs[i].querySelectorAll('td,th');
+   603→   603→      if (!cells.length) continue;
+   604→   604→      var o = {};
+   605→   605→      headers.forEach(function (h, idx) {
+   606→   606→        var v = (cells[idx] ? cells[idx].textContent : '').trim();
+   607→   607→        if (v !== '' && !isNaN(v) && /^-?\d+(\.\d+)?$/.test(v)) o[h] = Number(v);
+   608→   608→        else o[h] = v;
+   609→   609→      });
+   610→   610→      rows.push(o);
+   611→   611→    }
+   612→   612→    return { rows: rows, columns: headers };
+   613→   613→  }
+   614→   614→
+   615→   615→  // PDF (.pdf) via pdf.js. Extracts text per page. Attempts a simple table
+   616→   616→  // detection: if multiple text items share the same Y coordinate across pages,
+   617→   617→  // group them into rows. If detection fails, fall back to text-only.
+   618→   618→  function parsePDF(file) {
+   619→   619→    return loadScript('pdfjs').then(function () {
+   620→   620→      return new Promise(function (resolve, reject) {
+   621→   621→        var reader = new FileReader();
+   622→   622→        reader.onerror = function () { reject(new Error('Couldn\u2019t read this PDF.')); };
+   623→   623→        reader.onload = function () {
+   624→   624→          try {
+   625→   625→            // Configure the worker — pdf.js won't run without it.
+   626→   626→            if (window.pdfjsLib) {
+   627→   627→              pdfjsLib.GlobalWorkerOptions.workerSrc = LIB_URLS.pdfjsWorker;
+   628→   628→            }
+   629→   629→            var loadingTask = pdfjsLib.getDocument({ data: reader.result });
+   630→   630→            loadingTask.promise.then(function (pdf) {
+   631→   631→              var numPages = pdf.numPages;
+   632→   632→              var allItems = [];   // { page, str, x, y, w }
+   633→   633→              var rawText  = [];
+   634→   634→              // Sequentially fetch each page's text content. We do this serially
+   635→   635→              // (rather than Promise.all) because pdf.js's getTextContent can
+   636→   636→              // interfere with concurrent page operations on some builds, and
+   637→   637→              // serial is plenty fast for the demo's <5MB PDFs.
+   638→   638→              function readPagesSequentially(pageNum) {
+   639→   639→                if (pageNum > numPages) return Promise.resolve();
+   640→   640→                return pdf.getPage(pageNum).then(function (page) {
+   641→   641→                  return page.getTextContent().then(function (tc) {
+   642→   642→                    (tc.items || []).forEach(function (it) {
+   643→   643→                      allItems.push({
+   644→   644→                        page: pageNum,
+   645→   645→                        str: it.str,
+   646→   646→                        x: it.transform ? it.transform[4] : 0,
+   647→   647→                        y: it.transform ? it.transform[5] : 0,
+   648→   648→                        w: it.width || 0
+   649→   649→                      });
+   650→   650→                      if (it.str) rawText.push(it.str);
+   651→   651→                    });
+   652→   652→                    return readPagesSequentially(pageNum + 1);
+   653→   653→                  });
+   654→   654→                });
+   655→   655→              }
+   656→   656→              return readPagesSequentially(1).then(function () {
+   657→   657→                var text = rawText.join(' ').replace(/\s+/g, ' ').trim();
+   658→   658→                var parsed = detectPDFTable(allItems);
+   659→   659→                var warnings = [];
+   660→   660→                if (parsed.rows.length) {
+   661→   661→                  warnings.push('Detected a tabular layout from text positioning — rows may be imperfect. Verify against the source PDF.');
+   662→   662→                } else if (text) {
+   663→   663→                  warnings.push('No clear table layout detected — treating as a text document. Pipeline steps that need rows will return empty results, but the AI can still analyze the text.');
+   664→   664→                }
+   665→   665→                resolve(makeDoc({
+   666→   666→                  type: 'pdf', name: file.name, fileSize: file.size,
+   667→   667→                  rows: parsed.rows, columns: parsed.columns,
+   668→   668→                  rawText: text || '(no extractable text)', warnings: warnings
+   669→   669→                }));
+   670→   670→              });
+   671→   671→            }).catch(function () {
+   672→   672→              reject(new Error('Couldn\u2019t open this PDF. The file may be corrupted, password-protected, or a scanned image (text-extractable PDFs only).'));
+   673→   673→            });
+   674→   674→          } catch (e) {
+   675→   675→            reject(new Error('Couldn\u2019t parse this PDF. Make sure it\u2019s a valid .pdf and try again.'));
+   676→   676→          }
+   677→   677→        };
+   678→   678→        reader.readAsArrayBuffer(file);
+   679→   679→      });
+   680→   680→    });
+   681→   681→  }
+   682→   682→
+   683→   683→  // Heuristic PDF table detector: group items by Y coordinate (rounded to
+   684→   684→  // nearest 2px to absorb sub-pixel jitter), sort each row's items by X, and
+   685→   685→  // join into cells. If at least 3 rows × 2 cols, treat as a table.
+   686→   686→  function detectPDFTable(items) {
+   687→   687→    if (!items || items.length < 6) return { rows: [], columns: [] };
+   688→   688→    // Group by rounded Y.
+   689→   689→    var byY = {};
+   690→   690→    items.forEach(function (it) {
+   691→   691→      if (!it.str) return;
+   692→   692→      var y = Math.round(it.y / 2) * 2;
+   693→   693→      if (!byY[y]) byY[y] = [];
+   694→   694→      byY[y].push(it);
+   695→   695→    });
+   696→   696→    var yKeys = Object.keys(byY).map(Number).sort(function (a, b) { return b - a; }); // top of page = larger Y
+   697→   697→    if (yKeys.length < 3) return { rows: [], columns: [] };
+   698→   698→    // Build row arrays (items sorted by X within each row).
+   699→   699→    var rowArrays = yKeys.map(function (y) {
+   700→   700→      return byY[y].sort(function (a, b) { return a.x - b.x; })
+   701→   701→        .map(function (it) { return it.str; })
+   702→   702→        .join(' ').trim();
+   703→   703→    }).filter(function (s) { return s.length; });
+   704→   704→    if (rowArrays.length < 3) return { rows: [], columns: [] };
+   705→   705→    // Split each row on 2+ space gaps into columns. If the first row splits into
+   706→   706→    // ≥2 columns, use that count as the column count.
+   707→   707→    var splitRows = rowArrays.map(function (r) {
+   708→   708→      return r.split(/\s{2,}/).map(function (s) { return s.trim(); }).filter(function (s) { return s.length; });
+   709→   709→    });
+   710→   710→    var colCount = splitRows[0].length;
+   711→   711→    if (colCount < 2) return { rows: [], columns: [] };
+   712→   712→    // Require that most rows have ≥2 columns; otherwise it's just paragraph text.
+   713→   713→    var multiColRows = splitRows.filter(function (r) { return r.length >= 2; }).length;
+   714→   714→    if (multiColRows < splitRows.length * 0.6) return { rows: [], columns: [] };
+   715→   715→    var headers = splitRows[0].map(function (h, idx) { return h || 'col_' + (idx + 1); });
+   716→   716→    var rows = splitRows.slice(1).filter(function (r) { return r.length; }).map(function (r) {
+   717→   717→      var o = {};
+   718→   718→      headers.forEach(function (h, idx) {
+   719→   719→        var v = r[idx] != null ? r[idx] : '';
+   720→   720→        if (v !== '' && !isNaN(v) && /^-?\d+(\.\d+)?$/.test(v.replace(/[,$]/g, ''))) {
+   721→   721→          o[h] = Number(v.replace(/[,$]/g, ''));
+   722→   722→        } else {
+   723→   723→          o[h] = v;
+   724→   724→        }
+   725→   725→      });
+   726→   726→      return o;
+   727→   727→    });
+   728→   728→    return { rows: rows, columns: headers };
+   729→   729→  }
+   730→   730→
+   731→   731→  // Dispatcher: route a File to the right parser by extension + MIME.
+   732→   732→  function parseFile(file) {
+   733→   733→    var name = (file.name || '').toLowerCase();
+   734→   734→    if (file.size > MAX_FILE_SIZE) {
+   735→   735→      return Promise.reject(new Error('For demo performance, please use files under 5 MB.'));
+   736→   736→    }
+   737→   737→    if (/\.csv$/.test(name) || file.type === 'text/csv') return parseCSV(file);
+   738→   738→    if (/\.xlsx$|\.xls$|\.xlsm$/.test(name))           return parseExcel(file);
+   739→   739→    if (/\.docx$/.test(name))                           return parseWord(file);
+   740→   740→    if (/\.pdf$/.test(name) || file.type === 'application/pdf') return parsePDF(file);
+   741→   741→    return Promise.reject(new Error('Unsupported file type. Accepted: .xlsx, .xls, .docx, .pdf, .csv'));
+   742→   742→  }
+   743→   743→
+   744→   744→  // Load a sample template. For Excel-style samples this is synchronous
+   745→   745→  // (returns a doc object directly). For PDF samples it's async — fetches
+   746→   746→  // the PDF file and parses it via pdf.js (which is loaded lazily on first
+   747→   747→  // use). Returns a Promise<doc> in either case for unified handling.
+   748→   748→  function loadSample(tpl) {
+   749→   749→    if (tpl.isPDF) {
+   750→   750→      // Async path: fetch the PDF, wrap it as a File, hand off to parsePDF.
+   751→   751→      // Same parser path as a user-uploaded PDF, so detectPDFTable() runs
+   752→   752→      // against the real text positioning extracted by pdf.js.
+   753→   753→      return fetch(tpl.url, { cache: 'no-cache' }).then(function (r) {
+   754→   754→        if (!r.ok) throw new Error('Couldn\u2019t load the sample PDF (' + r.status + '). The file may not be deployed yet.');
+   755→   755→        return r.arrayBuffer();
+   756→   756→      }).then(function (buf) {
+   757→   757→        // Wrap as a File so parsePDF's FileReader.readAsArrayBuffer works.
+   758→   758→        var filename = tpl.url.split('/').pop();
+   759→   759→        var file = new File([buf], filename, { type: 'application/pdf' });
+   760→   760→        return parsePDF(file);
+   761→   761→      }).then(function (doc) {
+   762→   762→        // Tag the doc as a sample so the UI can show "sample dataset" hint
+   763→   763→        // and so the analysis step knows it's a synthetic demo PDF.
+   764→   764→        doc.name = tpl.name + ' (sample)';
+   765→   765→        if (!doc.warnings) doc.warnings = [];
+   766→   766→        doc.warnings.unshift('This is a committed sample PDF — no file was uploaded.');
+   767→   767→        return doc;
+   768→   768→      });
+   769→   769→    }
+   770→   770→    // Sync path: existing Excel-style generator
+   771→   771→    var rows = tpl.generate();
+   772→   772→    return Promise.resolve(makeDoc({
+   773→   773→      type: 'excel', name: tpl.name + ' (sample)', fileSize: 0,
+   774→   774→      rows: rows, columns: tpl.columns.slice(),
+   775→   775→      warnings: ['This is a generated sample dataset — no file was uploaded.']
+   776→   776→    }));
+   777→   777→  }
+   778→   778→
+   779→   779→  // ─── Groq auto-analysis ────────────────────────────────────────────────────
+   780→   780→  // Sends a sample of the document to Groq and parses the JSON analysis. Result
+   781→   781→  // shape: { documentType, summary, keyColumns, suggestedActions, detectedFormulas, dataQualityNotes }
+   782→   782→  function analyzeDocument(doc) {
+   783→   783→    var sample = doc.rows && doc.rows.length
+   784→   784→      ? JSON.stringify(doc.rows.slice(0, 5), null, 2)
+   785→   785→      : JSON.stringify((doc.rawText || '').slice(0, 800));
+   786→   786→    var prompt =
+   787→   787→      'You are analyzing a ' + doc.type + ' document titled "' + doc.name + '" with ' +
+   788→   788→      doc.rowCount + ' rows \u00d7 ' + doc.columnCount + ' columns.\n' +
+   789→   789→      'Column headers: ' + (doc.columns.join(', ') || '(none — text document)') + '\n' +
+   790→   790→      'First 5 rows (sample):\n' + sample + '\n\n' +
+   791→   791→      'Analyze this document and respond with a JSON object ONLY (no markdown, no explanation):\n' +
+   792→   792→      '{\n' +
+   793→   793→      '  "documentType": "what kind of data this is (e.g. \'regional sales\', \'invoice aging\', \'HR roster\')",\n' +
+   794→   794→      '  "summary": "one-sentence description of what\'s in the data",\n' +
+   795→   795→      '  "keyColumns": ["which columns look most important for analysis"],\n' +
+   796→   796→      '  "suggestedActions": [\n' +
+   797→   797→      '    "4-6 natural-language suggested actions, each a one-sentence instruction",\n' +
+   798→   798→      '    "Include a MIX of: tabular tasks (e.g. \'Summarize total revenue by region\', \'Top 5 products by qty\', \'Filter to Ontario and sort by revenue desc\') AND text tasks (e.g. \'Summarize this document in plain English\', \'What are the main points?\', \'Ask a question about this report\')",\n' +
+   799→   799→      '    "For text-heavy documents (PDF/Word with little tabular data), lean toward text tasks",\n' +
+   800→   800→      '    "For row-based documents (Excel/CSV with many rows), lean toward tabular tasks but include at least one text task",\n' +
+   801→   801→      '    "Make them specific to this data, not generic"\n' +
+   802→   802→      '  ],\n' +
+   803→   803→      '  "detectedFormulas": ["any formulas or derived columns you notice (e.g. \'revenue = qty \u00d7 price\')"],\n' +
+   804→   804→      '  "dataQualityNotes": ["any issues — missing values, outliers, etc."]\n' +
+   805→   805→      '}';
+   806→   806→    return callGroq(
+   807→   807→      [{ role: 'system', content: 'You are a data analyst that outputs only raw JSON.' },
+   808→   808→       { role: 'user', content: prompt }],
+   809→   809→      { temperature: 0.3, max_tokens: 800 }
+   810→   810→    ).then(function (content) { return extractJson(content); });
+   811→   811→  }
+   812→   812→
+   813→   813→  // ─── Groq pipeline-spec generator (NL → JSON) ──────────────────────────────
+   814→   814→  function generatePipelineSpec(doc, instruction) {
+   815→   815→    var sampleRow = doc.rows && doc.rows.length ? JSON.stringify(doc.rows[0]) : '(no rows)';
+   816→   816→    var prompt =
+   817→   817→      'You are an AI pipeline constructor. Convert the user\'s natural language instruction into a JSON pipeline spec.\n\n' +
+   818→   818→      'User\'s instruction: "' + instruction + '"\n\n' +
+   819→   819→      'Document context:\n' +
+   820→   820→      '- Type: ' + doc.type + '\n' +
+   821→   821→      '- Name: ' + doc.name + '\n' +
+   822→   822→      '- Columns: ' + (doc.columns.join(', ') || '(none)') + '\n' +
+   823→   823→      '- Sample row: ' + sampleRow + '\n' +
+   824→   824→      '- Row count: ' + doc.rowCount + '\n\n' +
+   825→   825→      'Respond with a JSON object ONLY (no markdown, no explanation):\n' +
+   826→   826→      '{\n' +
+   827→   827→      '  "name": "short pipeline name",\n' +
+   828→   828→      '  "description": "one-sentence description of what the pipeline does",\n' +
+   829→   829→      '  "steps": [\n' +
+   830→   830→      '    { "type": "filter"|"summarize"|"sort"|"limit"|"select"|"transform", "description": "what this step does",\n' +
+   831→   831→      '      // filter:    { "column": "...", "operator": "=="|"!="|">"|"<"|">="|"<="|"contains", "value": ... }\n' +
+   832→   832→      '      // summarize: { "groupBy": ["col1", ...], "aggregation": "sum"|"count"|"avg"|"min"|"max", "valueColumn": "..." }\n' +
+   833→   833→      '      // sort:      { "column": "...", "order": "asc"|"desc" }\n' +
+   834→   834→      '      // limit:     { "count": 5 }\n' +
+   835→   835→      '      // select:    { "columns": ["col1", "col2"] }\n' +
+   836→   836→      '      // transform: { "newColumn": "...", "expression": "qty * price" } }\n' +
+   837→   837→      '    }\n' +
+   838→   838→      '  ],\n' +
+   839→   839→      '  "output": { "format": "html_table"|"csv"|"excel"|"pdf"|"html_text", "emailSubject": "subject line", "emailBodyIntro": "one-sentence intro" }\n' +
+   840→   840→      '}\n\n' +
+   841→   841→      'CRITICAL DISPATCH RULE:\n' +
+   842→   842→      '  - If the instruction is a TABULAR operation (filter, summarize, aggregate, sort, count, group, top N, etc.) -> return spec with "steps[]"\n' +
+   843→   843→      '  - If the instruction is a TEXT TASK (summarize the document, main points, key takeaways, what does this report say, ask a question, explain, describe) -> return spec with "aiTask{}" instead of "steps[]"\n' +
+   844→   844→      '  - DO NOT include both. Pick one based on the instruction wording.\n\n' +
+   845→   845→      'aiTask shape (only when the instruction is a text task):\n' +
+   846→   846→      '  "aiTask": {\n' +
+   847→   847→      '    "type": "summary" | "bullet_points" | "qa",\n' +
+   848→   848→      '    "question": "...",          // ONLY for type="qa" — restate the user\'s question\n' +
+   849→   849→      '    "length": "short" | "medium" | "long",   // optional, only for type="summary"\n' +
+   850→   850→      '    "count": 5                  // optional, only for type="bullet_points" — how many points to extract\n' +
+   851→   851→      '  }\n' +
+   852→   852→      '  output.format for aiTask = "html_text"\n' +
+   853→   853→      '  Leave "steps" OUT of the JSON entirely when aiTask is present.';
+   854→   854→    return callGroq(
+   855→   855→      [{ role: 'system', content: 'You are a pipeline spec generator that outputs only raw JSON.' },
+   856→   856→       { role: 'user', content: prompt }],
+   857→   857→      { temperature: 0.2, max_tokens: 1000 }
+   858→   858→    ).then(function (content) {
+   859→   859→      var spec = extractJson(content);
+   860→   860→      // Accept EITHER steps[] (tabular) OR aiTask{} (text task).
+   861→   861→      // Groq decides which path based on the instruction wording.
+   862→   862→      var hasAiTask = spec.aiTask && typeof spec.aiTask === 'object' && typeof spec.aiTask.type === 'string';
+   863→   863→      var hasSteps = spec.steps && Array.isArray(spec.steps) && spec.steps.length;
+   864→   864→      if (!hasAiTask && !hasSteps) {
+   865→   865→        throw new Error('The AI didn\u2019t produce a pipeline or an AI task. Try rephrasing your instruction.');
+   866→   866→      }
+   867→   867→      if (hasSteps && !hasAiTask) {
+   868→   868→        // Tabular path — strip obviously bad step types so the executor doesn't choke.
+   869→   869→        spec.steps = spec.steps.filter(function (s) { return s && typeof s.type === 'string'; });
+   870→   870→        if (!spec.steps.length) {
+   871→   871→          throw new Error('The AI returned an unexpected response. Try rephrasing your instruction.');
+   872→   872→        }
+   873→   873→      }
+   874→   874→      if (!spec.output || typeof spec.output !== 'object') {
+   875→   875→        spec.output = { format: hasAiTask ? 'html_text' : 'html_table' };
+   876→   876→      }
+   877→   877→      return spec;
+   878→   878→    });
+   879→   879→  }
+   880→   880→
+   881→   881→  // ─── Safe expression evaluator (recursive descent) ─────────────────────────
+   882→   882→  // ─────────────────────────────────────────────────────────────────────────────
+   883→   883→  // Used by the "transform" step to evaluate expressions like "qty * price" or
+   884→   884→  // "first_name + ' ' + last_name" WITHOUT eval() or new Function() — those are
+   885→   885→  // XSS vectors and CSP-violators. This parser supports:
+   886→   886→  //   • numeric literals (12, 3.14)
+   887→   887→  //   • single-quoted string literals ('hello')
+   888→   888→  //   • column identifiers (qty, price, first_name)
+   889→   889→  //   • operators: + - * / %  (binary, left-associative; + on a string operand
+   890→   890→  //     coerces both sides to string and concatenates)
+   891→   891→  //   • parentheses for grouping
+   892→   892→  // Anything else throws — fail closed.
+   893→   893→  //
+   894→   894→  // Grammar (EBNF):
+   895→   895→  //   expression := term { ('+' | '-') term }
+   896→   896→  //   term       := factor { ('*' | '/' | '%') factor }
+   897→   897→  //   factor     := number | string | identifier | '(' expression ')'
+   898→   898→  // ─────────────────────────────────────────────────────────────────────────────
+   899→   899→
+
+[showing lines 400-899 of 2002; use offset=900 with limit to continue reading]

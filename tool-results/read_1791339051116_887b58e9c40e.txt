@@ -1,0 +1,502 @@
+  1300→  1300→  display: flex; align-items: center; gap: 12px;\
+  1301→  1301→  color: var(--text-soft); font-size: 0.82rem; margin: 22px 0 14px;\
+  1302→  1302→}\
+  1303→  1303→.pb-divider::before, .pb-divider::after {\
+  1304→  1304→  content: ""; flex: 1; height: 1px; background: var(--border);\
+  1305→  1305→}\
+  1306→  1306→.pb-sample-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }\
+  1307→  1307→.pb-sample {\
+  1308→  1308→  background: var(--bg-alt);\
+  1309→  1309→  border: 1px solid var(--border);\
+  1310→  1310→  border-radius: var(--radius-sm);\
+  1311→  1311→  padding: 14px;\
+  1312→  1312→  cursor: pointer;\
+  1313→  1313→  text-align: left;\
+  1314→  1314→  transition: transform 0.2s var(--ease), border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);\
+  1315→  1315→  font-family: inherit; color: var(--text); width: 100%;\
+  1316→  1316→}\
+  1317→  1317→.pb-sample:hover { transform: translateY(-2px); border-color: var(--indigo); box-shadow: 0 12px 26px -14px rgba(99,102,241,0.5); }\
+  1318→  1318→.pb-sample-icon { color: var(--indigo); font-size: 1.1rem; margin-bottom: 6px; }\
+  1319→  1319→.pb-sample-name { font-weight: 600; font-size: 0.92rem; }\
+  1320→  1320→.pb-sample-meta { color: var(--text-soft); font-size: 0.78rem; margin-top: 2px; }\
+  1321→  1321→@media (max-width: 720px) { .pb-sample-grid { grid-template-columns: 1fr; } }\
+  1322→  1322→\
+  1323→  1323→.pb-doc-head { display: flex; align-items: center; gap: 14px; }\
+  1324→  1324→.pb-doc-icon {\
+  1325→  1325→  width: 44px; height: 44px; border-radius: var(--radius-sm);\
+  1326→  1326→  background: linear-gradient(135deg, rgba(99,102,241,0.16), rgba(6,182,212,0.16));\
+  1327→  1327→  display: flex; align-items: center; justify-content: center;\
+  1328→  1328→  color: var(--indigo); font-size: 1.2rem; flex-shrink: 0;\
+  1329→  1329→}\
+  1330→  1330→.pb-doc-name { font-weight: 600; color: var(--text); }\
+  1331→  1331→.pb-doc-meta { color: var(--text-soft); font-size: 0.82rem; }\
+  1332→  1332→.pb-link { background: none; border: none; color: var(--indigo); cursor: pointer; font-size: 0.85rem; padding: 0; text-decoration: underline; font-family: inherit; }\
+  1333→  1333→.pb-link:hover { color: var(--cyan); }\
+  1334→  1334→\
+  1335→  1335→.pb-textarea {\
+  1336→  1336→  width: 100%; min-height: 96px; resize: vertical;\
+  1337→  1337→  background: var(--bg-alt); border: 1px solid var(--border-strong);\
+  1338→  1338→  border-radius: var(--radius-sm); padding: 12px 14px;\
+  1339→  1339→  color: var(--text); font-family: var(--font-body); font-size: 0.95rem; line-height: 1.5;\
+  1340→  1340→  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);\
+  1341→  1341→}\
+  1342→  1342→.pb-textarea:focus { outline: none; border-color: var(--indigo); box-shadow: var(--ring); }\
+  1343→  1343→\
+  1344→  1344→.pb-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 16px; }\
+  1345→  1345→.pb-chip-exec { background: linear-gradient(135deg, #4338ca, #0e7490); color: #fff; border-color: transparent; box-shadow: 0 4px 12px -4px rgba(67,56,202,0.45); }\
+  1346→  1346→.pb-chip-exec:hover { transform: translateY(-1px); box-shadow: 0 6px 16px -6px rgba(67,56,202,0.6); }\
+  1347→  1347→.pb-chip {\
+  1348→  1348→  background: var(--bg-alt); border: 1px solid var(--border);\
+  1349→  1349→  border-radius: 999px; padding: 7px 14px; cursor: pointer;\
+  1350→  1350→  font-size: 0.82rem; color: var(--text-muted); font-family: inherit;\
+  1351→  1351→  transition: border-color 0.2s var(--ease), color 0.2s var(--ease), background 0.2s var(--ease);\
+  1352→  1352→}\
+  1353→  1353→.pb-chip:hover { border-color: var(--indigo); color: var(--indigo); background: rgba(99,102,241,0.06); }\
+  1354→  1354→\
+  1355→  1355→.pb-btn-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }\
+  1356→  1356→.pb-btn-sm { min-height: 38px; padding: 8px 16px; font-size: 0.85rem; border-radius: 999px; }\
+  1357→  1357→.pb-btn-row .pb-spacer { flex: 1; }\
+  1358→  1358→\
+  1359→  1359→.pb-step-list { list-style: none; padding: 0; margin: 12px 0 0; }\
+  1360→  1360→.pb-step-item { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }\
+  1361→  1361→.pb-step-item:first-child { border-top: none; padding-top: 4px; }\
+  1362→  1362→.pb-step-num {\
+  1363→  1363→  flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;\
+  1364→  1364→  background: var(--gradient); color: #fff; font-size: 0.78rem; font-weight: 700;\
+  1365→  1365→  display: flex; align-items: center; justify-content: center; font-family: var(--font-head);\
+  1366→  1366→}\
+  1367→  1367→.pb-step-body { flex: 1; min-width: 0; }\
+  1368→  1368→.pb-step-type {\
+  1369→  1369→  display: inline-block; font-family: var(--font-head); font-size: 0.68rem; font-weight: 600;\
+  1370→  1370→  text-transform: uppercase; letter-spacing: 0.06em;\
+  1371→  1371→  background: rgba(99,102,241,0.12); color: var(--indigo);\
+  1372→  1372→  padding: 2px 8px; border-radius: 6px; margin-bottom: 4px;\
+  1373→  1373→}\
+  1374→  1374→.pb-step-desc { color: var(--text); font-size: 0.92rem; margin: 0 0 4px; }\
+  1375→  1375→.pb-step-params { color: var(--text-soft); font-size: 0.78rem; font-family: var(--font-body); word-break: break-word; }\
+  1376→  1376→\
+  1377→  1377→.pb-collapsible-toggle {\
+  1378→  1378→  background: none; border: 1px solid var(--border); color: var(--text-muted);\
+  1379→  1379→  padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.8rem;\
+  1380→  1380→  font-family: inherit; display: inline-flex; align-items: center; gap: 6px;\
+  1381→  1381→}\
+  1382→  1382→.pb-collapsible-toggle:hover { border-color: var(--indigo); color: var(--indigo); }\
+  1383→  1383→.pb-pre {\
+  1384→  1384→  background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--radius-sm);\
+  1385→  1385→  padding: 14px; overflow: auto; margin: 12px 0 0; font-size: 0.78rem; line-height: 1.5;\
+  1386→  1386→  color: var(--text-muted); max-height: 320px; white-space: pre; font-family: "SFMono-Regular", Consolas, monospace;\
+  1387→  1387→}\
+  1388→  1388→\
+  1389→  1389→.pb-result-summary { color: var(--text-soft); font-size: 0.85rem; margin: 0 0 14px; }\
+  1390→  1390→.pb-table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); max-height: 520px; }\
+  1391→  1391→.pb-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }\
+  1392→  1392→.pb-table th, .pb-table td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }\
+  1393→  1393→.pb-table th {\
+  1394→  1394→  background: var(--bg-alt); color: var(--text-muted); font-family: var(--font-head);\
+  1395→  1395→  font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em;\
+  1396→  1396→  position: sticky; top: 0; z-index: 1;\
+  1397→  1397→}\
+  1398→  1398→.pb-table td.num { text-align: right; font-variant-numeric: tabular-nums; }\
+  1399→  1399→.pb-table tbody tr:hover { background: rgba(99,102,241,0.04); }\
+  1400→  1400→.pb-table-empty { padding: 36px; text-align: center; color: var(--text-soft); }\
+  1401→  1401→.pb-load-more {\
+  1402→  1402→  display: block; margin: 14px auto 0; background: var(--bg-alt); border: 1px solid var(--border);\
+  1403→  1403→  color: var(--text-muted); padding: 8px 18px; border-radius: 999px; cursor: pointer; font-family: inherit; font-size: 0.82rem;\
+  1404→  1404→}\
+  1405→  1405→.pb-load-more:hover { border-color: var(--indigo); color: var(--indigo); }\
+  1406→  1406→\
+  1407→  1407→.pb-chart-card { background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-top: 18px; }\
+  1408→  1408→.pb-chart-title { font-family: var(--font-head); font-size: 0.82rem; font-weight: 600; color: var(--text-muted); margin: 0 0 6px; }\
+  1409→  1409→.pb-chart-body { width: 100%; height: 360px; }\
+  1410→  1410→.pb-chart-empty { padding: 36px; text-align: center; color: var(--text-soft); font-size: 0.85rem; }\
+  1411→  1411→\
+  1412→  1412→.pb-download-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }\
+  1413→  1413→\
+  1414→  1414→.pb-analysis-card { background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; margin-top: 16px; }\
+  1415→  1415→.pb-analysis-title { font-family: var(--font-head); font-size: 0.92rem; font-weight: 600; margin: 0 0 4px; }\
+  1416→  1416→.pb-analysis-summary { color: var(--text-muted); font-size: 0.88rem; margin: 0 0 12px; }\
+  1417→  1417→.pb-analysis-section { margin-top: 10px; }\
+  1418→  1418→.pb-analysis-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-soft); margin: 0 0 4px; font-family: var(--font-head); }\
+  1419→  1419→.pb-analysis-list { margin: 0; padding-left: 18px; color: var(--text-muted); font-size: 0.84rem; }\
+  1420→  1420→.pb-analysis-list li { margin-bottom: 3px; }\
+  1421→  1421→.pb-pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }\
+  1422→  1422→.pb-pill { background: rgba(6,182,212,0.1); color: var(--cyan); border: 1px solid rgba(6,182,212,0.25); border-radius: 6px; padding: 3px 8px; font-size: 0.74rem; font-family: var(--font-head); font-weight: 600; }\
+  1423→  1423→\
+  1424→  1424→.pb-error {\
+  1425→  1425→  background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3);\
+  1426→  1426→  border-radius: var(--radius-sm); padding: 12px 16px; color: #b91c1c; margin-top: 12px; font-size: 0.88rem;\
+  1427→  1427→}\
+  1428→  1428→[data-theme="dark"] .pb-error { color: #fca5a5; }\
+  1429→  1429→.pb-warn {\
+  1430→  1430→  background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.28);\
+  1431→  1431→  border-radius: var(--radius-sm); padding: 10px 14px; color: #b45309; margin-top: 12px; font-size: 0.82rem;\
+  1432→  1432→}\
+  1433→  1433→[data-theme="dark"] .pb-warn { color: #fcd34d; }\
+  1434→  1434→\
+  1435→  1435→.pb-loading { display: flex; align-items: center; gap: 10px; color: var(--text-soft); font-size: 0.88rem; padding: 14px 0; }\
+  1436→  1436→.pb-loading-block { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 32px 16px; text-align: center; color: var(--text-soft); font-size: 0.95rem; }\
+  1437→  1437→.pb-loading-sub { font-size: 0.78rem; color: var(--text-soft); opacity: 0.7; }\
+  1438→  1438→.pb-spinner {\
+  1439→  1439→  width: 16px; height: 16px; border: 2px solid var(--border-strong); border-top-color: var(--indigo);\
+  1440→  1440→  border-radius: 50%; animation: pb-spin 0.8s linear infinite; flex-shrink: 0;\
+  1441→  1441→}\
+  1442→  1442→@keyframes pb-spin { to { transform: rotate(360deg); } }\
+  1443→  1443→\
+  1444→  1444→.pb-email-html-preview { max-height: 480px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 0; background: #f8fafc; }\
+  1445→  1445→.pb-email-html-preview > div { margin: 0 !important; }\
+  1446→  1446→.pb-modal-pre { white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; line-height: 1.6; color: var(--text-soft); background: var(--surface-2); padding: 14px 16px; border-radius: 8px; max-height: 360px; overflow-y: auto; }\
+  1447→  1447→.pb-ai-result-card { padding: 20px 24px; border-radius: var(--radius); background: linear-gradient(135deg, rgba(99,102,241,0.04), rgba(6,182,212,0.03)); border: 1px solid var(--border); margin-top: 8px; }\
+  1448→  1448→.pb-ai-result-text { font-size: 0.98rem; line-height: 1.75; color: var(--text); white-space: normal; }\
+  1449→  1449→.pb-ai-result-text br + br { margin-top: 8px; }\
+  1450→  1450→\
+  1451→  1451→.pb-saved-list { list-style: none; padding: 0; margin: 0; }\
+  1452→  1452→.pb-saved-item {\
+  1453→  1453→  display: flex; align-items: center; gap: 12px; padding: 12px 0;\
+  1454→  1454→  border-top: 1px solid var(--border); flex-wrap: wrap;\
+  1455→  1455→}\
+  1456→  1456→.pb-saved-item:first-child { border-top: none; }\
+  1457→  1457→.pb-saved-info { flex: 1; min-width: 180px; }\
+  1458→  1458→.pb-saved-name { font-weight: 600; color: var(--text); font-size: 0.9rem; }\
+  1459→  1459→.pb-saved-meta { color: var(--text-soft); font-size: 0.78rem; }\
+  1460→  1460→.pb-saved-actions { display: flex; gap: 6px; }\
+  1461→  1461→\
+  1462→  1462→.pb-empty { color: var(--text-soft); font-size: 0.88rem; padding: 18px 0; text-align: center; }\
+  1463→  1463→\
+  1464→  1464→.pb-modal-backdrop {\
+  1465→  1465→  position: fixed; inset: 0; background: rgba(15,23,42,0.55); backdrop-filter: blur(4px);\
+  1466→  1466→  display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 20px;\
+  1467→  1467→}\
+  1468→  1468→.pb-modal {\
+  1469→  1469→  background: var(--bg-elevated, var(--surface)); border: 1px solid var(--border-strong);\
+  1470→  1470→  border-radius: var(--radius); padding: 24px; max-width: 640px; width: 100%; max-height: 80vh; overflow: auto;\
+  1471→  1471→  box-shadow: var(--shadow-lg);\
+  1472→  1472→}\
+  1473→  1473→.pb-modal-title { font-family: var(--font-head); font-size: 1.1rem; font-weight: 700; margin: 0 0 14px; }\
+  1474→  1474→.pb-modal-body { color: var(--text); font-size: 0.9rem; }\
+  1475→  1475→.pb-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }\
+  1476→  1476→.pb-modal-pre {\
+  1477→  1477→  background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--radius-sm);\
+  1478→  1478→  padding: 12px; white-space: pre-wrap; word-break: break-word; font-size: 0.78rem;\
+  1479→  1479→  color: var(--text-muted); max-height: 320px; overflow: auto; font-family: "SFMono-Regular", Consolas, monospace;\
+  1480→  1480→}\
+  1481→  1481→.pb-input {\
+  1482→  1482→  width: 100%; background: var(--bg-alt); border: 1px solid var(--border-strong);\
+  1483→  1483→  border-radius: var(--radius-sm); padding: 10px 12px; color: var(--text); font-family: inherit; font-size: 0.92rem;\
+  1484→  1484→}\
+  1485→  1485→.pb-input:focus { outline: none; border-color: var(--indigo); box-shadow: var(--ring); }\
+  1486→  1486→.pb-toggle-row { display: flex; gap: 18px; align-items: center; margin: 10px 0 14px; font-size: 0.85rem; color: var(--text-muted); }\
+  1487→  1487→.pb-toggle-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }\
+  1488→  1488→.pb-toggle-row input[type="radio"] { cursor: pointer; }\
+  1489→  1489→.pb-toggle-disabled { opacity: 0.45; cursor: not-allowed; }\
+  1490→  1490→.pb-toggle-disabled label, .pb-toggle-disabled input { cursor: not-allowed; }\
+  1491→  1491→.pb-toggle-tip { font-size: 0.74rem; color: var(--text-soft); margin-left: 4px; }\
+  1492→  1492→.pb-rate-note { color: var(--text-soft); font-size: 0.74rem; margin-top: 10px; text-align: right; }\
+  1493→  1493→';
+  1494→  1494→    var style = document.createElement('style');
+  1495→  1495→    style.id = 'pb-style';
+  1496→  1496→    style.textContent = css;
+  1497→  1497→    document.head.appendChild(style);
+  1498→  1498→  }
+  1499→  1499→
+  1500→  1500→  // ─── HTML table renderer ────────────────────────────────────────────────────
+  1501→  1501→  // Returns an HTML string. Numeric columns detected by scanning the first
+  1502→  1502→  // non-empty cell of each column — right-aligned + number-formatted.
+  1503→  1503→  function detectNumericColumns(rows, columns) {
+  1504→  1504→    var isNum = {};
+  1505→  1505→    columns.forEach(function (c) {
+  1506→  1506→      var found = false;
+  1507→  1507→      for (var i = 0; i < rows.length && i < 20; i++) {
+  1508→  1508→        var v = rows[i][c];
+  1509→  1509→        if (v !== '' && v != null) {
+  1510→  1510→          isNum[c] = typeof v === 'number' || (!isNaN(Number(v)) && /^-?\d+(\.\d+)?$/.test(String(v).replace(/[,$]/g, '')));
+  1511→  1511→          found = true;
+  1512→  1512→          break;
+  1513→  1513→        }
+  1514→  1514→      }
+  1515→  1515→      if (!found) isNum[c] = false;
+  1516→  1516→    });
+  1517→  1517→    return isNum;
+  1518→  1518→  }
+  1519→  1519→
+  1520→  1520→  function renderTableHTML(rows, columns, visibleRows) {
+  1521→  1521→    if (!rows.length) {
+  1522→  1522→      return '<div class="pb-table-empty">No rows match this pipeline.</div>';
+  1523→  1523→    }
+  1524→  1524→    var isNum = detectNumericColumns(rows, columns);
+  1525→  1525→    var shown = rows.slice(0, visibleRows);
+  1526→  1526→    var html = '<div class="pb-table-wrap"><table class="pb-table"><thead><tr>';
+  1527→  1527→    columns.forEach(function (c) { html += '<th class="' + (isNum[c] ? 'num' : '') + '">' + esc(c) + '</th>'; });
+  1528→  1528→    html += '</tr></thead><tbody>';
+  1529→  1529→    shown.forEach(function (r) {
+  1530→  1530→      html += '<tr>';
+  1531→  1531→      columns.forEach(function (c) {
+  1532→  1532→        var v = r[c];
+  1533→  1533→        var cell;
+  1534→  1534→        if (isNum[c]) cell = fmtNumber(v);
+  1535→  1535→        else cell = esc(v);
+  1536→  1536→        html += '<td class="' + (isNum[c] ? 'num' : '') + '">' + cell + '</td>';
+  1537→  1537→      });
+  1538→  1538→      html += '</tr>';
+  1539→  1539→    });
+  1540→  1540→    html += '</tbody></table></div>';
+  1541→  1541→    if (rows.length > visibleRows) {
+  1542→  1542→      html += '<button class="pb-load-more" id="pb-load-more">Load more (' + (rows.length - visibleRows) + ' remaining)</button>';
+  1543→  1543→    }
+  1544→  1544→    return html;
+  1545→  1545→  }
+  1546→  1546→
+  1547→  1547→  // ─── ECharts chart renderer ──────────────────────────────────────────────────
+  1548→  1548→  // Auto-picks chart type from data shape:
+  1549→  1549→  //   • 1 row → no chart
+  1550→  1550→  //   • 2 cols, col1 categorical + col2 numeric → bar
+  1551→  1551→  //   • 2 cols, col1 looks like a date → line (sorted by date)
+  1552→  1552→  //   • 3+ cols, col1 categorical + rest numeric → grouped bar
+  1553→  1553→  //   • otherwise → "chart not available" message
+  1554→  1554→  function looksLikeDateColumn(rows, col) {
+  1555→  1555→    if (!rows.length) return false;
+  1556→  1556→    var parsed = 0, total = 0;
+  1557→  1557→    for (var i = 0; i < Math.min(rows.length, 12); i++) {
+  1558→  1558→      var v = rows[i][col];
+  1559→  1559→      if (v == null || v === '') continue;
+  1560→  1560→      total++;
+  1561→  1561→      var d = new Date(v);
+  1562→  1562→      if (!isNaN(d.getTime()) && d.getFullYear() > 1990) parsed++;
+  1563→  1563→    }
+  1564→  1564→    return total >= 3 && parsed / total >= 0.7;
+  1565→  1565→  }
+  1566→  1566→  function isNumericVal(v) {
+  1567→  1567→    if (typeof v === 'number') return true;
+  1568→  1568→    return v != null && v !== '' && !isNaN(Number(String(v).replace(/[,$]/g, ''))) && /^-?\d+(\.\d+)?$/.test(String(v).replace(/[,$]/g, ''));
+  1569→  1569→  }
+  1570→  1570→
+  1571→  1571→  function renderChart(mount) {
+  1572→  1572→    var body = mount.querySelector('.pb-chart-body');
+  1573→  1573→    if (!body) return;
+  1574→  1574→    var res = state.result;
+  1575→  1575→    if (!res || !res.rows || res.rows.length <= 1 || !res.columns.length) {
+  1576→  1576→      body.innerHTML = '<div class="pb-chart-empty">Chart not available for this data shape.</div>';
+  1577→  1577→      return;
+  1578→  1578→    }
+  1579→  1579→    var cols = res.columns;
+  1580→  1580→    var rows = res.rows;
+  1581→  1581→    var picked = pickChartConfig(rows, cols);
+  1582→  1582→    if (!picked) {
+  1583→  1583→      body.innerHTML = '<div class="pb-chart-empty">Chart not available for this data shape.</div>';
+  1584→  1584→      return;
+  1585→  1585→    }
+  1586→  1586→    loadScript('echarts').then(function () {
+  1587→  1587→      try {
+  1588→  1588→        if (state.chart) { try { state.chart.dispose(); } catch (e) {} state.chart = null; }
+  1589→  1589→        var inst = echarts.init(body, null, { renderer: 'canvas' });
+  1590→  1590→        inst.setOption(picked);
+  1591→  1591→        state.chart = inst;
+  1592→  1592→        // Resize handler — only bound once.
+  1593→  1593→        if (!renderChart._resizeBound) {
+  1594→  1594→          window.addEventListener('resize', function () {
+  1595→  1595→            if (state.chart) try { state.chart.resize(); } catch (e) {}
+  1596→  1596→          });
+  1597→  1597→          renderChart._resizeBound = true;
+  1598→  1598→        }
+  1599→  1599→      } catch (e) {
+  1600→  1600→        body.innerHTML = '<div class="pb-chart-empty">Chart rendering failed.</div>';
+  1601→  1601→      }
+  1602→  1602→    }).catch(function () {
+  1603→  1603→      body.innerHTML = '<div class="pb-chart-empty">Couldn\u2019t load the chart library.</div>';
+  1604→  1604→    });
+  1605→  1605→  }
+  1606→  1606→
+  1607→  1607→  function pickChartConfig(rows, cols) {
+  1608→  1608→    var theme = getTheme();
+  1609→  1609→    var baseTooltip = {
+  1610→  1610→      trigger: 'axis',
+  1611→  1611→      backgroundColor: tooltipBgColor(),
+  1612→  1612→      textStyle: { color: tooltipTextColor() },
+  1613→  1613→      borderColor: 'rgba(99,102,241,0.2)'
+  1614→  1614→    };
+  1615→  1615→    var axisLabel = { color: axisLabelColor(), fontSize: 11 };
+  1616→  1616→    var splitLine = { lineStyle: { color: chartGridColor() } };
+  1617→  1617→    var axisLine  = { lineStyle: { color: chartGridColor() } };
+  1618→  1618→    var gradient = ['#6366f1', '#06b6d4', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#3b82f6'];
+  1619→  1619→
+  1620→  1620→    // 2-column cases.
+  1621→  1621→    if (cols.length === 2) {
+  1622→  1622→      var c1 = cols[0], c2 = cols[1];
+  1623→  1623→      // Categorical + numeric → bar.
+  1624→  1624→      if (!looksLikeDateColumn(rows, c1) && rows.every(function (r) { return isNumericVal(r[c2]); })) {
+  1625→  1625→        return {
+  1626→  1626→          tooltip: baseTooltip,
+  1627→  1627→          grid: { left: 50, right: 24, top: 24, bottom: 60, containLabel: true },
+  1628→  1628→          xAxis: { type: 'category', data: rows.map(function (r) { return String(r[c1]); }), axisLabel: Object.assign({}, axisLabel, { rotate: rows.length > 6 ? 35 : 0 }), axisLine: axisLine, axisTick: { lineStyle: { color: chartGridColor() } } },
+  1629→  1629→          yAxis: { type: 'value', axisLabel: axisLabel, splitLine: splitLine, axisLine: axisLine },
+  1630→  1630→          series: [{ type: 'bar', data: rows.map(function (r) { return Number(r[c2]); }), itemStyle: { color: gradient[0], borderRadius: [4, 4, 0, 0] } }]
+  1631→  1631→        };
+  1632→  1632→      }
+  1633→  1633→      // Date + numeric → line.
+  1634→  1634→      if (looksLikeDateColumn(rows, c1) && rows.every(function (r) { return isNumericVal(r[c2]); })) {
+  1635→  1635→        var sorted = rows.slice().sort(function (a, b) { return new Date(a[c1]) - new Date(b[c1]); });
+  1636→  1636→        return {
+  1637→  1637→          tooltip: baseTooltip,
+  1638→  1638→          grid: { left: 50, right: 24, top: 24, bottom: 60, containLabel: true },
+  1639→  1639→          xAxis: { type: 'category', data: sorted.map(function (r) { return String(r[c1]); }), axisLabel: Object.assign({}, axisLabel, { rotate: 35 }), axisLine: axisLine, axisTick: { lineStyle: { color: chartGridColor() } } },
+  1640→  1640→          yAxis: { type: 'value', axisLabel: axisLabel, splitLine: splitLine, axisLine: axisLine },
+  1641→  1641→          series: [{ type: 'line', data: sorted.map(function (r) { return Number(r[c2]); }), smooth: true, symbol: 'circle', symbolSize: 6, lineStyle: { color: gradient[0], width: 2 }, itemStyle: { color: gradient[0] }, areaStyle: { color: 'rgba(99,102,241,0.12)' } }]
+  1642→  1642→        };
+  1643→  1643→      }
+  1644→  1644→      return null;
+  1645→  1645→    }
+  1646→  1646→    // 3+ column cases: categorical col1 + remaining numeric → grouped bar.
+  1647→  1647→    if (cols.length >= 3) {
+  1648→  1648→      var c1g = cols[0];
+  1649→  1649→      var numericCols = cols.slice(1).filter(function (c) {
+  1650→  1650→        return rows.every(function (r) { return isNumericVal(r[c]); });
+  1651→  1651→      });
+  1652→  1652→      if (numericCols.length >= 1) {
+  1653→  1653→        var cats = rows.map(function (r) { return String(r[c1g]); });
+  1654→  1654→        var series = numericCols.map(function (c, idx) {
+  1655→  1655→          return {
+  1656→  1656→            name: c, type: 'bar',
+  1657→  1657→            data: rows.map(function (r) { return Number(r[c]); }),
+  1658→  1658→            itemStyle: { color: gradient[idx % gradient.length], borderRadius: [4, 4, 0, 0] }
+  1659→  1659→          };
+  1660→  1660→        });
+  1661→  1661→        return {
+  1662→  1662→          tooltip: baseTooltip,
+  1663→  1663→          legend: { data: numericCols, textStyle: { color: axisLabelColor() }, top: 0 },
+  1664→  1664→          grid: { left: 50, right: 24, top: 40, bottom: 60, containLabel: true },
+  1665→  1665→          xAxis: { type: 'category', data: cats, axisLabel: Object.assign({}, axisLabel, { rotate: cats.length > 6 ? 35 : 0 }), axisLine: axisLine, axisTick: { lineStyle: { color: chartGridColor() } } },
+  1666→  1666→          yAxis: { type: 'value', axisLabel: axisLabel, splitLine: splitLine, axisLine: axisLine },
+  1667→  1667→          series: series
+  1668→  1668→        };
+  1669→  1669→      }
+  1670→  1670→    }
+  1671→  1671→    return null;
+  1672→  1672→  }
+  1673→  1673→
+  1674→  1674→  // ─── Download helpers ──────────────────────────────────────────────────────
+  1675→  1675→  function downloadBlob(filename, blob) {
+  1676→  1676→    var url = URL.createObjectURL(blob);
+  1677→  1677→    var a = document.createElement('a');
+  1678→  1678→    a.href = url; a.download = filename;
+  1679→  1679→    document.body.appendChild(a);
+  1680→  1680→    a.click();
+  1681→  1681→    setTimeout(function () {
+  1682→  1682→      URL.revokeObjectURL(url);
+  1683→  1683→      a.remove();
+  1684→  1684→    }, 200);
+  1685→  1685→  }
+  1686→  1686→
+  1687→  1687→  function downloadCSV(rows, columns, filename) {
+  1688→  1688→    if (!rows.length) { rows = [{}]; }
+  1689→  1689→    var cols = columns.length ? columns : (rows[0] ? Object.keys(rows[0]) : []);
+  1690→  1690→    var escCsv = function (v) {
+  1691→  1691→      var s = v == null ? '' : String(v);
+  1692→  1692→      if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  1693→  1693→      return s;
+  1694→  1694→    };
+  1695→  1695→    var lines = [cols.map(escCsv).join(',')];
+  1696→  1696→    rows.forEach(function (r) {
+  1697→  1697→      lines.push(cols.map(function (c) { return escCsv(r[c]); }).join(','));
+  1698→  1698→    });
+  1699→  1699→    var csv = lines.join('\r\n');
+  1700→  1700→    downloadBlob(filename || 'pipeline-result.csv', new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  1701→  1701→  }
+  1702→  1702→
+  1703→  1703→  function downloadExcel(rows, columns, filename) {
+  1704→  1704→    return loadScript('xlsx').then(function () {
+  1705→  1705→      var cols = columns.length ? columns : (rows[0] ? Object.keys(rows[0]) : []);
+  1706→  1706→      var data = [cols];
+  1707→  1707→      rows.forEach(function (r) { data.push(cols.map(function (c) { return r[c]; })); });
+  1708→  1708→      var ws = XLSX.utils.aoa_to_sheet(data);
+  1709→  1709→      // Set column widths based on max content length per column (cap at 40 chars).
+  1710→  1710→      ws['!cols'] = cols.map(function (c, i) {
+  1711→  1711→        var maxLen = String(c).length;
+  1712→  1712→        for (var j = 0; j < Math.min(rows.length, 200); j++) {
+  1713→  1713→          var v = rows[j][c];
+  1714→  1714→          var l = (v == null ? '' : String(v)).length;
+  1715→  1715→          if (l > maxLen) maxLen = l;
+  1716→  1716→        }
+  1717→  1717→        return { wch: Math.min(40, Math.max(10, maxLen + 2)) };
+  1718→  1718→      });
+  1719→  1719→      // Freeze the header row so it stays visible when scrolling.
+  1720→  1720→      ws['!freeze'] = { ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft', state: 'frozen' };
+  1721→  1721→      // Bold the header cells (best-effort — SheetJS community edition may
+  1722→  1722→      // not preserve styling on all spreadsheet readers, but Excel + LibreOffice
+  1723→  1723→      // both honor it).
+  1724→  1724→      cols.forEach(function (c, i) {
+  1725→  1725→        var addr = XLSX.utils.encode_cell({ r: 0, c: i });
+  1726→  1726→        if (ws[addr]) {
+  1727→  1727→          ws[addr].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '4338CA' } } };
+  1728→  1728→        }
+  1729→  1729→      });
+  1730→  1730→      var wb = XLSX.utils.book_new();
+  1731→  1731→      XLSX.utils.book_append_sheet(wb, ws, 'Results');
+  1732→  1732→      var arr = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
+  1733→  1733→      downloadBlob(filename || 'pipeline-result.xlsx', new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  1734→  1734→    });
+  1735→  1735→  }
+  1736→  1736→
+  1737→  1737→  function downloadPDF(rows, columns, filename, title) {
+  1738→  1738→    return loadScript('jspdf').then(function () {
+  1739→  1739→      var jsPDF = window.jspdf ? window.jspdf.jsPDF : window.jsPDF;
+  1740→  1740→      if (!jsPDF) throw new Error('jsPDF failed to load');
+  1741→  1741→      var doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  1742→  1742→      var cols = columns.length ? columns : (rows[0] ? Object.keys(rows[0]) : []);
+  1743→  1743→      var pageW = doc.internal.pageSize.getWidth();
+  1744→  1744→      var pageH = doc.internal.pageSize.getHeight();
+  1745→  1745→      var margin = 36;
+  1746→  1746→      var generated = new Date().toLocaleString('en-CA', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  1747→  1747→      var docName = state.document ? state.document.name : '';
+  1748→  1748→      var docMeta = state.document ? (state.document.type.toUpperCase() + ' \u00b7 ' + state.document.rowCount + ' rows') : '';
+  1749→  1749→      // ── Branded gradient header bar (two-tone rectangle approximation) ──
+  1750→  1750→      doc.setFillColor(67, 56, 202);  // indigo-700
+  1751→  1751→      doc.rect(0, 0, pageW, 56, 'F');
+  1752→  1752→      doc.setFillColor(14, 116, 144);  // cyan-700
+  1753→  1753→      doc.rect(0, 56, pageW, 4, 'F');
+  1754→  1754→      doc.setTextColor(255, 255, 255);
+  1755→  1755→      doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+  1756→  1756→      doc.text('INSIGHT ANALYTICS', margin, 22);
+  1757→  1757→      doc.setFontSize(16);
+  1758→  1758→      doc.text(title || 'Pipeline Result', margin, 40);
+  1759→  1759→      // Generated date right-aligned in header
+  1760→  1760→      doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+  1761→  1761→      doc.text('Generated ' + generated, pageW - margin, 22, { align: 'right' });
+  1762→  1762→      // ── Document metadata box ──
+  1763→  1763→      var metaBoxY = 80;
+  1764→  1764→      doc.setFillColor(241, 245, 249);  // slate-100
+  1765→  1765→      doc.rect(margin, metaBoxY, pageW - 2 * margin, 38, 'F');
+  1766→  1766→      doc.setFillColor(67, 56, 202);  // indigo accent strip on left
+  1767→  1767→      doc.rect(margin, metaBoxY, 3, 38, 'F');
+  1768→  1768→      doc.setTextColor(100, 116, 139); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+  1769→  1769→      doc.text('PIPELINE', margin + 14, metaBoxY + 12);
+  1770→  1770→      doc.setTextColor(15, 23, 42); doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+  1771→  1771→      doc.text(title || 'Pipeline Result', margin + 14, metaBoxY + 26);
+  1772→  1772→      if (docName) {
+  1773→  1773→        doc.setTextColor(100, 116, 139); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+  1774→  1774→        doc.text('Source: ' + docName + (docMeta ? '  \u00b7  ' + docMeta : ''), margin + 250, metaBoxY + 12);
+  1775→  1775→      }
+  1776→  1776→      doc.setTextColor(100, 116, 139); doc.setFontSize(8);
+  1777→  1777→      doc.text(rows.length + ' rows \u00d7 ' + cols.length + ' cols', pageW - margin - 4, metaBoxY + 26, { align: 'right' });
+  1778→  1778→      // ── Compute column widths ──
+  1779→  1779→      var numericCols = cols.map(function (c) { return isNumericCol(rows, c); });
+  1780→  1780→      var maxLens = cols.map(function (c) { return String(c).length; });
+  1781→  1781→      rows.slice(0, 200).forEach(function (r) {
+  1782→  1782→        cols.forEach(function (c, i) {
+  1783→  1783→          var l = fmtVal(r[c]).length;
+  1784→  1784→          if (l > maxLens[i]) maxLens[i] = Math.min(28, l);
+  1785→  1785→        });
+  1786→  1786→      });
+  1787→  1787→      var totalLen = maxLens.reduce(function (a, b) { return a + b; }, 0) || 1;
+  1788→  1788→      var colWidths = maxLens.map(function (l) { return Math.max(40, (l / totalLen) * (pageW - 2 * margin)); });
+  1789→  1789→      var totalW = colWidths.reduce(function (a, b) { return a + b; }, 0);
+  1790→  1790→      var scale = (pageW - 2 * margin) / totalW;
+  1791→  1791→      colWidths = colWidths.map(function (w) { return w * scale; });
+  1792→  1792→      // ── Table ──
+  1793→  1793→      var tableTop = metaBoxY + 50;
+  1794→  1794→      var rowH = 16;
+  1795→  1795→      var headerH = 20;
+  1796→  1796→      // Header row
+  1797→  1797→      doc.setFillColor(67, 56, 202);  // indigo-700
+  1798→  1798→      doc.rect(margin, tableTop, pageW - 2 * margin, headerH, 'F');
+  1799→  1799→      doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+
+[showing lines 1300-1799 of 2002; use offset=1800 with limit to continue reading]

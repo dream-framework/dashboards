@@ -1,0 +1,702 @@
+     1→  2000→        '<div style="background:#fff;padding:24px 28px;border:1px solid #e2e8f0;border-top:0;">' +
+     2→  2001→          '<div style="margin-bottom:20px;padding:14px 16px;background:#f1f5f9;border-radius:8px;border-left:3px solid #4338ca;">' +
+     3→  2002→            '<div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">PIPELINE</div>' +
+     4→  2003→            '<div style="font-size:15px;font-weight:600;color:#0f172a;">' + esc(name) + '</div>' +
+     5→  2004→            (docName ? '<div style="font-size:12px;color:#64748b;margin-top:4px;">Source: ' + docName + (docMeta ? ' &middot; ' + docMeta : '') + '</div>' : '') +
+     6→  2005→            '<div style="font-size:12px;color:#64748b;margin-top:2px;">Generated: ' + esc(generated) + '</div>' +
+     7→  2006→          '</div>' +
+     8→  2007→          introHTML +
+     9→  2008→          '<div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:#64748b;text-transform:uppercase;margin:0 0 8px;">Result &middot; ' + rows.length + ' rows &times; ' + cols.length + ' cols</div>' +
+    10→  2009→          '<table style="width:100%;border-collapse:collapse;font-family:Inter,Helvetica,Arial,sans-serif;">' +
+    11→  2010→            '<thead><tr>' + headerCells + '</tr></thead>' +
+    12→  2011→            '<tbody>' + bodyRows + '</tbody>' +
+    13→  2012→          '</table>' +
+    14→  2013→          moreNote +
+    15→  2014→        '</div>' +
+    16→  2015→        // Footer
+    17→  2016→        '<div style="background:#0b1120;padding:18px 28px;border-radius:0 0 12px 12px;text-align:center;">' +
+    18→  2017→          '<div style="font-size:13px;font-weight:600;color:#e6edf7;">Insight Analytics &middot; <em style="font-style:italic;color:#06b6d4;">Live truth on every desk.</em></div>' +
+    19→  2018→          '<div style="font-size:11px;color:#64748b;margin-top:4px;"><a href="https://insight-analytics.ca" style="color:#06b6d4;text-decoration:none;">insight-analytics.ca</a></div>' +
+    20→  2019→        '</div>' +
+    21→  2020→      '</div>';
+    22→  2021→  }
+    23→  2022→
+    24→  2023→  // HTML email for AI text results — same branded header/footer, but the body
+    25→  2024→  // is the AI-generated text rendered as styled paragraphs/bullets.
+    26→  2025→  function buildEmailBodyHTMLForAI(spec, aiText) {
+    27→  2026→    var name = (spec && spec.name) || 'AI Result';
+    28→  2027→    var intro = (spec && spec.output && spec.output.emailBodyIntro) || '';
+    29→  2028→    var generated = new Date().toLocaleString('en-CA', {
+    30→  2029→      year: 'numeric', month: 'long', day: 'numeric',
+    31→  2030→      hour: 'numeric', minute: '2-digit'
+    32→  2031→    });
+    33→  2032→    var docName = state.document ? esc(state.document.name) : '';
+    34→  2033→    var docMeta = state.document
+    35→  2034→      ? (state.document.type.toUpperCase() + ' &middot; ' + state.document.rowCount + ' rows &times; ' + state.document.columnCount + ' cols')
+    36→  2035→      : '';
+    37→  2036→    // Convert AI text to HTML — paragraphs separated by blank lines, bullets preserved.
+    38→  2037→    var textHTML = esc(aiText)
+    39→  2038→      .replace(/\r?\n\r?\n/g, '</p><p style="margin:0 0 14px;color:#0f172a;font-size:14px;line-height:1.7;">')
+    40→  2039→      .replace(/\r?\n/g, '<br>');
+    41→  2040→    var introHTML = intro ? '<p style="margin:0 0 18px;color:#475569;font-size:14px;line-height:1.6;">' + esc(intro) + '</p>' : '';
+    42→  2041→    return '' +
+    43→  2042→      '<div style="font-family:Inter,Helvetica,Arial,sans-serif;max-width:680px;margin:0 auto;background:#f8fafc;padding:24px;">' +
+    44→  2043→        '<div style="background:linear-gradient(135deg,#4338ca 0%,#0e7490 100%);padding:24px 28px;border-radius:12px 12px 0 0;">' +
+    45→  2044→          '<div style="font-size:11px;font-weight:700;letter-spacing:0.16em;color:#cbd5e1;text-transform:uppercase;">INSIGHT ANALYTICS</div>' +
+    46→  2045→          '<div style="font-size:22px;font-weight:700;color:#fff;margin-top:4px;">AI Executive Summary</div>' +
+    47→  2046→        '</div>' +
+    48→  2047→        '<div style="background:#fff;padding:24px 28px;border:1px solid #e2e8f0;border-top:0;">' +
+    49→  2048→          '<div style="margin-bottom:20px;padding:14px 16px;background:#f1f5f9;border-radius:8px;border-left:3px solid #4338ca;">' +
+    50→  2049→            '<div style="font-size:11px;font-weight:700;color:#64748b;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">PIPELINE</div>' +
+    51→  2050→            '<div style="font-size:15px;font-weight:600;color:#0f172a;">' + esc(name) + '</div>' +
+    52→  2051→            (docName ? '<div style="font-size:12px;color:#64748b;margin-top:4px;">Source: ' + docName + (docMeta ? ' &middot; ' + docMeta : '') + '</div>' : '') +
+    53→  2052→            '<div style="font-size:12px;color:#64748b;margin-top:2px;">Generated: ' + esc(generated) + '</div>' +
+    54→  2053→          '</div>' +
+    55→  2054→          introHTML +
+    56→  2055→          '<div style="padding:18px 20px;background:linear-gradient(135deg,rgba(99,102,241,0.04),rgba(6,182,212,0.03));border:1px solid #e2e8f0;border-radius:8px;">' +
+    57→  2056→            '<p style="margin:0 0 14px;color:#0f172a;font-size:14px;line-height:1.7;">' + textHTML + '</p>' +
+    58→  2057→          '</div>' +
+    59→  2058→        '</div>' +
+    60→  2059→        '<div style="background:#0b1120;padding:18px 28px;border-radius:0 0 12px 12px;text-align:center;">' +
+    61→  2060→          '<div style="font-size:13px;font-weight:600;color:#e6edf7;">Insight Analytics &middot; <em style="font-style:italic;color:#06b6d4;">Live truth on every desk.</em></div>' +
+    62→  2061→          '<div style="font-size:11px;color:#64748b;margin-top:4px;"><a href="https://insight-analytics.ca" style="color:#06b6d4;text-decoration:none;">insight-analytics.ca</a></div>' +
+    63→  2062→        '</div>' +
+    64→  2063→      '</div>';
+    65→  2064→  }
+    66→  2065→
+    67→  2066→  function openEmailPreview(spec, rows, columns) {
+    68→  2067→    var subject = (spec && spec.output && spec.output.emailSubject) || ('Pipeline result: ' + (spec ? spec.name : 'untitled'));
+    69→  2068→    var bodyPlain = buildEmailBody(spec, rows, columns);
+    70→  2069→    var bodyHTML = buildEmailBodyHTML(spec, rows, columns);
+    71→  2070→    openModal('Email preview', '\
+    72→  2071→      <div class="pb-analysis-section">\
+    73→  2072→        <p class="pb-analysis-label">Subject</p>\
+    74→  2073→        <div class="pb-modal-pre">' + esc(subject) + '</div>\
+    75→  2074→      </div>\
+    76→  2075→      <div class="pb-analysis-section" style="margin-top:14px;">\
+    77→  2076→        <p class="pb-analysis-label">Preview (rendered HTML)</p>\
+    78→  2077→        <div class="pb-email-html-preview">' + bodyHTML + '</div>\
+    79→  2078→      </div>\
+    80→  2079→      <div class="pb-analysis-section" style="margin-top:14px;">\
+    81→  2080→        <p class="pb-analysis-label" style="cursor:pointer;text-decoration:underline;" id="pb-toggle-plain">Show plain-text body (what gets sent via mailto:)</p>\
+    82→  2081→        <div class="pb-modal-pre" id="pb-plain-body" style="display:none;">' + esc(bodyPlain) + '</div>\
+    83→  2082→      </div>\
+    84→  2083→      <div class="pb-analysis-section" style="margin-top:14px;">\
+    85→  2084→        <p class="pb-analysis-label">Recipient</p>\
+    86→  2085→        <input class="pb-input" id="pb-email-recipient" type="email" placeholder="recipient@example.com" />\
+    87→  2086→      </div>',
+    88→  2087→      [
+    89→  2088→        { label: 'Download as HTML email', primary: false, action: function () {
+    90→  2089→          // Self-contained .html file the user can open in a browser + forward
+    91→  2090→          // via their email client. Full branded HTML email with inline CSS.
+    92→  2091→          var fullHTML = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + esc(subject) + '</title></head><body>' + bodyHTML + '</body></html>';
+    93→  2092→          var blob = new Blob([fullHTML], { type: 'text/html;charset=utf-8' });
+    94→  2093→          var url = URL.createObjectURL(blob);
+    95→  2094→          var a = document.createElement('a');
+    96→  2095→          a.href = url;
+    97→  2096→          a.download = (spec && spec.name ? spec.name.replace(/[^a-z0-9]+/gi, '_').toLowerCase() : 'pipeline_result') + '.html';
+    98→  2097→          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    99→  2098→          setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+   100→  2099→        } },
+   101→  2100→        { label: 'Open in email client', primary: true, action: function () {
+   102→  2101→          var to = ($('pb-email-recipient') || {}).value || '';
+   103→  2102→          var url = 'mailto:' + encodeURIComponent(to).replace(/%40/, '@') +
+   104→  2103→            '?subject=' + encodeURIComponent(subject) +
+   105→  2104→            '&body=' + encodeURIComponent(bodyPlain);
+   106→  2105→          window.location.href = url;
+   107→  2106→        } }
+   108→  2107→      ]);
+   109→  2108→    // Wire the plain-text toggle
+   110→  2109→    setTimeout(function () {
+   111→  2110→      var toggle = $('pb-toggle-plain');
+   112→  2111→      var plain = $('pb-plain-body');
+   113→  2112→      if (toggle && plain) {
+   114→  2113→        toggle.addEventListener('click', function () {
+   115→  2114→          plain.style.display = plain.style.display === 'none' ? 'block' : 'none';
+   116→  2115→        });
+   117→  2116→      }
+   118→  2117→    }, 50);
+   119→  2118→  }
+   120→  2119→
+   121→  2120→  // ─── Reusable modal ─────────────────────────────────────────────────────────
+   122→  2121→  function openModal(title, bodyHTML, buttons) {
+   123→  2122→    closeModal(); // only one at a time
+   124→  2123→    var back = document.createElement('div');
+   125→  2124→    back.className = 'pb-modal-backdrop';
+   126→  2125→    back.id = 'pb-modal';
+   127→  2126→    var actionsHTML = '';
+   128→  2127→    (buttons || []).forEach(function (b, idx) {
+   129→  2128→      actionsHTML += '<button class="btn ' + (b.primary ? 'btn-primary' : 'btn-ghost') +
+   130→  2129→        ' pb-btn-sm" data-pb-modal-action="' + idx + '">' + esc(b.label) + '</button>';
+   131→  2130→    });
+   132→  2131→    back.innerHTML = '\
+   133→  2132→      <div class="pb-modal" role="dialog" aria-modal="true">\
+   134→  2133→        <h3 class="pb-modal-title">' + esc(title) + '</h3>\
+   135→  2134→        <div class="pb-modal-body">' + bodyHTML + '</div>\
+   136→  2135→        <div class="pb-modal-actions">' + actionsHTML + '</div>\
+   137→  2136→      </div>';
+   138→  2137→    document.body.appendChild(back);
+   139→  2138→    back.addEventListener('click', function (e) {
+   140→  2139→      if (e.target === back) { closeModal(); return; }
+   141→  2140→      var btn = e.target.closest('[data-pb-modal-action]');
+   142→  2141→      if (btn) {
+   143→  2142→        var idx = parseInt(btn.getAttribute('data-pb-modal-action'), 10);
+   144→  2143→        var handler = (buttons || [])[idx];
+   145→  2144→        if (handler && handler.action) handler.action();
+   146→  2145→        // Don't auto-close — caller's action may want to keep modal open (e.g. mailto).
+   147→  2146→        // Most actions call closeModal themselves if appropriate.
+   148→  2147→      }
+   149→  2148→    });
+   150→  2149→    document.addEventListener('keydown', modalEscHandler);
+   151→  2150→  }
+   152→  2151→  function modalEscHandler(e) { if (e.key === 'Escape') closeModal(); }
+   153→  2152→  function closeModal() {
+   154→  2153→    var m = $('pb-modal');
+   155→  2154→    if (m) m.remove();
+   156→  2155→    document.removeEventListener('keydown', modalEscHandler);
+   157→  2156→  }
+   158→  2157→
+   159→  2158→  // ─── Persistence ────────────────────────────────────────────────────────────
+   160→  2159→  function loadSavedPipelines() {
+   161→  2160→    try {
+   162→  2161→      var raw = localStorage.getItem(STORAGE_KEY);
+   163→  2162→      state.savedPipelines = raw ? JSON.parse(raw) : [];
+   164→  2163→      if (!Array.isArray(state.savedPipelines)) state.savedPipelines = [];
+   165→  2164→    } catch (e) { state.savedPipelines = []; }
+   166→  2165→  }
+   167→  2166→  function persistSavedPipelines() {
+   168→  2167→    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedPipelines)); } catch (e) {}
+   169→  2168→  }
+   170→  2169→  function savePipeline(name) {
+   171→  2170→    if (!state.pipeline) return;
+   172→  2171→    var docSummary = state.document
+   173→  2172→      ? (state.document.name + ' (' + state.document.rowCount + ' rows)')
+   174→  2173→      : 'No document';
+   175→  2174→    var entry = {
+   176→  2175→      id: 'pl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+   177→  2176→      name: name || state.pipeline.name || 'Untitled pipeline',
+   178→  2177→      spec: state.pipeline,
+   179→  2178→      docSummary: docSummary,
+   180→  2179→      savedAt: Date.now()
+   181→  2180→    };
+   182→  2181→    state.savedPipelines.unshift(entry);
+   183→  2182→    persistSavedPipelines();
+   184→  2183→    return entry;
+   185→  2184→  }
+   186→  2185→  function deletePipeline(id) {
+   187→  2186→    state.savedPipelines = state.savedPipelines.filter(function (p) { return p.id !== id; });
+   188→  2187→    persistSavedPipelines();
+   189→  2188→  }
+   190→  2189→  function importPipelineSpec(file) {
+   191→  2190→    return new Promise(function (resolve, reject) {
+   192→  2191→      var reader = new FileReader();
+   193→  2192→      reader.onerror = function () { reject(new Error('Couldn\u2019t read that file.')); };
+   194→  2193→      reader.onload = function () {
+   195→  2194→        try {
+   196→  2195→          var spec = JSON.parse(reader.result);
+   197→  2196→          if (!spec.steps || !Array.isArray(spec.steps)) throw new Error('Not a pipeline spec');
+   198→  2197→          resolve(spec);
+   199→  2198→        } catch (e) { reject(new Error('That file isn\u2019t a valid pipeline spec JSON.')); }
+   200→  2199→      };
+   201→  2200→      reader.readAsText(file);
+   202→  2201→    });
+   203→  2202→  }
+   204→  2203→
+   205→  2204→  // ─── Sub-renderers ──────────────────────────────────────────────────────────
+   206→  2205→  // Each writes into a fixed-id slot inside the mount. render() calls them in
+   207→  2206→  // order; each no-ops its slot when its slice of state is absent.
+   208→  2207→
+   209→  2208→  function renderUploadCard() {
+   210→  2209→    var slot = $('pb-upload-slot');
+   211→  2210→    if (!slot) return;
+   212→  2211→    // Loading state — sample is being fetched + parsed (especially the PDF
+   213→  2212→    // sample which needs pdf.js). Show a spinner instead of the buttons so
+   214→  2213→    // the user knows something is happening.
+   215→  2214→    if (state.sampleLoading) {
+   216→  2215→      slot.innerHTML = '\
+   217→  2216→        <div class="pb-card">\
+   218→  2217→          <div class="pb-loading-block">\
+   219→  2218→            <div class="pb-spinner"></div>\
+   220→  2219→            <div>Loading sample\u2026</div>\
+   221→  2220→            <div class="pb-loading-sub">Fetching and parsing the sample document.</div>\
+   222→  2221→          </div>\
+   223→  2222→        </div>';
+   224→  2223→      return;
+   225→  2224→    }
+   226→  2225→    // Error loading the sample
+   227→  2226→    if (state.sampleLoadingError) {
+   228→  2227→      slot.innerHTML = '\
+   229→  2228→        <div class="pb-card">\
+   230→  2229→          <div class="pb-error"><i class="fas fa-triangle-exclamation"></i> ' + esc(state.sampleLoadingError) + '</div>\
+   231→  2230→          <button class="pb-link" id="pb-retry-sample" type="button">Back to samples</button>\
+   232→  2231→        </div>';
+   233→  2232→      return;
+   234→  2233→    }
+   235→  2234→    if (state.document) { slot.innerHTML = ''; return; }
+   236→  2235→    var samples = SAMPLE_TEMPLATES.map(function (t) {
+   237→  2236→      // PDF samples show a PDF icon + "PDF · 30 rows" instead of "generated"
+   238→  2237→      var meta = t.isPDF ? (t.rowCount + ' rows \u00b7 PDF') : (t.rowCount + ' rows \u00b7 generated');
+   239→  2238→      return '<button class="pb-sample" data-pb-sample="' + t.key + '" type="button">' +
+   240→  2239→        '<div class="pb-sample-icon"><i class="fas ' + t.icon + '"></i></div>' +
+   241→  2240→        '<div class="pb-sample-name">' + esc(t.name) + '</div>' +
+   242→  2241→        '<div class="pb-sample-meta">' + meta + '</div>' +
+   243→  2242→      '</button>';
+   244→  2243→    }).join('');
+   245→  2244→    slot.innerHTML = '\
+   246→  2245→      <div class="pb-card">\
+   247→  2246→        <div class="pb-card-step">Step 1</div>\
+   248→  2247→        <h3 class="pb-card-title">Upload your document</h3>\
+   249→  2248→        <p class="pb-card-sub">Drop a file below or pick a generated sample. Accepted: .xlsx, .xls, .docx, .pdf, .csv.</p>\
+   250→  2249→        <div class="pb-drop" id="pb-drop" tabindex="0" role="button" aria-label="Upload a file">\
+   251→  2250→          <div class="pb-drop-icon"><i class="fas fa-cloud-arrow-up"></i></div>\
+   252→  2251→          <div class="pb-drop-text">Drop a file here, or click to browse</div>\
+   253→  2252→          <div class="pb-drop-hint">Max 5 MB for the demo</div>\
+   254→  2253→        </div>\
+   255→  2254→        <input type="file" id="pb-file-input" accept=".xlsx,.xls,.docx,.pdf,.csv" hidden />\
+   256→  2255→        <div class="pb-divider">or pick a sample</div>\
+   257→  2256→        <div class="pb-sample-grid">' + samples + '</div>\
+   258→  2257→      </div>';
+   259→  2258→  }
+   260→  2259→
+   261→  2260→  function renderDocumentCard() {
+   262→  2261→    var slot = $('pb-doc-slot');
+   263→  2262→    if (!slot) return;
+   264→  2263→    if (!state.document) { slot.innerHTML = ''; return; }
+   265→  2264→    var d = state.document;
+   266→  2265→    var icon = d.type === 'excel' ? 'fa-file-excel' :
+   267→  2266→              d.type === 'word'  ? 'fa-file-word' :
+   268→  2267→              d.type === 'pdf'    ? 'fa-file-pdf' :
+   269→  2268→              d.type === 'csv'    ? 'fa-file-csv' : 'fa-file';
+   270→  2269→    var warns = (d.warnings || []).map(function (w) { return '<div class="pb-warn"><i class="fas fa-circle-exclamation"></i> ' + esc(w) + '</div>'; }).join('');
+   271→  2270→    var analysisHTML = '';
+   272→  2271→    if (state.analysisLoading) {
+   273→  2272→      analysisHTML = '<div class="pb-analysis-card"><div class="pb-loading"><div class="pb-spinner"></div>AI is analyzing your document\u2026</div></div>';
+   274→  2273→    } else if (state.analysisError) {
+   275→  2274→      analysisHTML = '<div class="pb-error"><i class="fas fa-triangle-exclamation"></i> ' + esc(state.analysisError) +
+   276→  2275→        ' <button class="pb-link" id="pb-retry-analysis" type="button">Try again</button></div>';
+   277→  2276→    } else if (state.analysis) {
+   278→  2277→      var a = state.analysis;
+   279→  2278→      // Built-in 'Generate executive summary' chip — always shown regardless of
+   280→  2279→      // what Groq suggests. Triggers aiTask{type:'summary', length:'medium'} on
+   281→  2280→      // the current document via a special 'exec' marker (the click handler
+   282→  2281→      // recognizes this and bypasses the Groq-indexed suggestion lookup).
+   283→  2282→      var execChip = '<button class="pb-chip pb-chip-exec" data-pb-suggest="exec" type="button">' +
+   284→  2283→        '<i class="fas fa-file-signature" style="font-size:0.78rem;margin-right:4px;"></i>Generate executive summary</button>';
+   285→  2284→      var chips = (a.suggestedActions || []).map(function (s, i) {
+   286→  2285→        return '<button class="pb-chip" data-pb-suggest="' + i + '" type="button">' + esc(s) + '</button>';
+   287→  2286→      }).join('');
+   288→  2287→      var keyPills = (a.keyColumns || []).map(function (c) { return '<span class="pb-pill">' + esc(c) + '</span>'; }).join('');
+   289→  2288→      var formulas = (a.detectedFormulas && a.detectedFormulas.length)
+   290→  2289→        ? '<ul class="pb-analysis-list">' + a.detectedFormulas.map(function (f) { return '<li>' + esc(f) + '</li>'; }).join('') + '</ul>'
+   291→  2290→        : '<div style="color:var(--text-soft);font-size:0.82rem;">None detected.</div>';
+   292→  2291→      var notes = (a.dataQualityNotes && a.dataQualityNotes.length)
+   293→  2292→        ? '<ul class="pb-analysis-list">' + a.dataQualityNotes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>'
+   294→  2293→        : '<div style="color:var(--text-soft);font-size:0.82rem;">No issues detected.</div>';
+   295→  2294→      analysisHTML = '<div class="pb-analysis-card">\
+   296→  2295→        <div class="pb-analysis-title"><i class="fas fa-wand-magic-sparkles" style="color:var(--indigo);"></i> We analyzed your ' + esc(d.type) + '</div>\
+   297→  2296→        <p class="pb-analysis-summary">' + esc(a.documentType ? (a.documentType + ' \u2014 ' + a.summary) : a.summary) + '</p>\
+   298→  2297→        ' + (keyPills ? '<div class="pb-analysis-section"><p class="pb-analysis-label">Key columns</p><div class="pb-pill-row">' + keyPills + '</div></div>' : '') + '\
+   299→  2298→        ' + (chips ? '<div class="pb-analysis-section"><p class="pb-analysis-label">Suggested actions \u2014 click to prefill</p><div class="pb-chips">' + execChip + chips + '</div></div>' : '') + '\
+   300→  2299→        <div class="pb-analysis-section"><p class="pb-analysis-label">Detected formulas</p>' + formulas + '</div>\
+   301→  2300→        <div class="pb-analysis-section"><p class="pb-analysis-label">Data quality notes</p>' + notes + '</div>\
+   302→  2301→      </div>';
+   303→  2302→    }
+   304→  2303→    slot.innerHTML = '\
+   305→  2304→      <div class="pb-card">\
+   306→  2305→        <div class="pb-card-step">Document loaded</div>\
+   307→  2306→        <div class="pb-doc-head">\
+   308→  2307→          <div class="pb-doc-icon"><i class="fas ' + icon + '"></i></div>\
+   309→  2308→          <div style="flex:1;min-width:0;">\
+   310→  2309→            <div class="pb-doc-name">' + esc(d.name) + '</div>\
+   311→  2310→            <div class="pb-doc-meta">' + esc(d.type.toUpperCase()) + (d.fileSize ? ' \u00b7 ' + fmtBytes(d.fileSize) : '') + ' \u00b7 ' + d.rowCount + ' rows \u00d7 ' + d.columnCount + ' cols</div>\
+   312→  2311→          </div>\
+   313→  2312→          <button class="pb-link" id="pb-replace-doc" type="button">Replace document</button>\
+   314→  2313→        </div>\
+   315→  2314→        ' + warns + '\
+   316→  2315→        ' + analysisHTML + '\
+   317→  2316→      </div>';
+   318→  2317→  }
+   319→  2318→
+   320→  2319→  function renderInstructionCard() {
+   321→  2320→    var slot = $('pb-instruction-slot');
+   322→  2321→    if (!slot) return;
+   323→  2322→    if (!state.document) { slot.innerHTML = ''; return; }
+   324→  2323→    var err = state.pipelineError
+   325→  2324→      ? '<div class="pb-error"><i class="fas fa-triangle-exclamation"></i> ' + esc(state.pipelineError) + '</div>'
+   326→  2325→      : '';
+   327→  2326→    var remaining = remainingGroqCalls();
+   328→  2327→    var rateNote = '<div class="pb-rate-note">' + remaining + ' / ' + MAX_GROQ_CALLS + ' AI calls remaining this session</div>';
+   329→  2328→    slot.innerHTML = '\
+   330→  2329→      <div class="pb-card">\
+   331→  2330→        <div class="pb-card-step">Step 2</div>\
+   332→  2331→        <h3 class="pb-card-title">Describe what you want to do</h3>\
+   333→  2332→        <p class="pb-card-sub">Plain English \u2014 the AI turns it into an executable pipeline.</p>\
+   334→  2333→        <textarea class="pb-textarea" id="pb-instruction" placeholder="e.g. Summarize total revenue by region and sort high to low"></textarea>\
+   335→  2334→        ' + err + '\
+   336→  2335→        <div class="pb-btn-row">\
+   337→  2336→          <button class="btn btn-primary pb-btn-sm" id="pb-generate" type="button"' + (state.pipelineLoading ? ' disabled' : '') + '>\
+   338→  2337→            <i class="fas fa-wand-magic-sparkles"></i><span class="btn-text">Generate pipeline</span>\
+   339→  2338→          </button>\
+   340→  2339→          ' + (state.pipelineLoading ? '<div class="pb-loading"><div class="pb-spinner"></div>AI is constructing your pipeline\u2026</div>' : '') + '\
+   341→  2340→        </div>\
+   342→  2341→        ' + rateNote + '\
+   343→  2342→      </div>';
+   344→  2343→    // Restore textarea value (typing doesn't trigger re-render, but generate does).
+   345→  2344→    var ta = $('pb-instruction');
+   346→  2345→    if (ta) {
+   347→  2346→      ta.value = state.instruction;
+   348→  2347→      ta.addEventListener('input', function () { state.instruction = ta.value; });
+   349→  2348→      // Ctrl/Cmd+Enter to generate.
+   350→  2349→      ta.addEventListener('keydown', function (e) {
+   351→  2350→        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); onGenerateClick(); }
+   352→  2351→      });
+   353→  2352→    }
+   354→  2353→  }
+   355→  2354→
+   356→  2355→  function renderPipelineCard() {
+   357→  2356→    var slot = $('pb-pipeline-slot');
+   358→  2357→    if (!slot) return;
+   359→  2358→    if (!state.pipeline) { slot.innerHTML = ''; return; }
+   360→  2359→    var p = state.pipeline;
+   361→  2360→    var stepHTML = (p.steps || []).map(function (s, i) {
+   362→  2361→      var params = '';
+   363→  2362→      if (s.type === 'filter')     params = 'where ' + esc(s.column) + ' ' + esc(s.operator) + ' ' + esc(JSON.stringify(s.value));
+   364→  2363→      else if (s.type === 'summarize') params = 'group by [' + esc((s.groupBy || []).join(', ')) + '], ' + esc(s.aggregation) + '(' + esc(s.valueColumn || '') + ')';
+   365→  2364→      else if (s.type === 'sort')  params = 'by ' + esc(s.column) + ' ' + esc(s.order || 'asc');
+   366→  2365→      else if (s.type === 'limit')  params = 'first ' + esc(s.count) + ' rows';
+   367→  2366→      else if (s.type === 'select') params = 'columns [' + esc((s.columns || []).join(', ')) + ']';
+   368→  2367→      else if (s.type === 'transform') params = 'new column ' + esc(s.newColumn) + ' = ' + esc(s.expression);
+   369→  2368→      return '<li class="pb-step-item">\
+   370→  2369→        <div class="pb-step-num">' + (i + 1) + '</div>\
+   371→  2370→        <div class="pb-step-body">\
+   372→  2371→          <div class="pb-step-type">' + esc(s.type) + '</div>\
+   373→  2372→          <p class="pb-step-desc">' + esc(s.description || '') + '</p>\
+   374→  2373→          <div class="pb-step-params">' + params + '</div>\
+   375→  2374→        </div>\
+   376→  2375→      </li>';
+   377→  2376→    }).join('');
+   378→  2377→    var jsonHTML = state.showSpecJson
+   379→  2378→      ? '<pre class="pb-pre">' + esc(JSON.stringify(p, null, 2)) + '</pre>'
+   380→  2379→      : '';
+   381→  2380→    var outFmt = p.output && p.output.format ? p.output.format : 'html_table';
+   382→  2381→    slot.innerHTML = '\
+   383→  2382→      <div class="pb-card">\
+   384→  2383→        <div class="pb-card-step">Step 3</div>\
+   385→  2384→        <h3 class="pb-card-title">Review the pipeline</h3>\
+   386→  2385→        <p class="pb-card-sub">' + esc(p.description || p.name || '') + ' \u2014 output: <code>' + esc(outFmt) + '</code></p>\
+   387→  2386→        <ol class="pb-step-list">' + stepHTML + '</ol>\
+   388→  2387→        <div class="pb-btn-row">\
+   389→  2388→          <button class="btn btn-primary pb-btn-sm" id="pb-run" type="button">\
+   390→  2389→            <i class="fas fa-play"></i><span class="btn-text">Run pipeline</span>\
+   391→  2390→          </button>\
+   392→  2391→          <button class="pb-link" id="pb-edit-instruction" type="button">Edit instruction</button>\
+   393→  2392→          <div class="pb-spacer"></div>\
+   394→  2393→          <button class="pb-collapsible-toggle" id="pb-toggle-json" type="button">\
+   395→  2394→            <i class="fas ' + (state.showSpecJson ? 'fa-chevron-up' : 'fa-chevron-down') + '"></i>\
+   396→  2395→            ' + (state.showSpecJson ? 'Hide JSON' : 'Show JSON') + '\
+   397→  2396→          </button>\
+   398→  2397→        </div>\
+   399→  2398→        ' + jsonHTML + '\
+   400→  2399→      </div>';
+   401→  2400→  }
+   402→  2401→
+   403→  2402→  function renderResultsCard() {
+   404→  2403→    var slot = $('pb-results-slot');
+   405→  2404→    if (!slot) return;
+   406→  2405→    // Three render branches: AI text result (state.aiResult), tabular result
+   407→  2406→    // (state.result), or loading/error state.
+   408→  2407→    var hasAi = !!state.aiResult;
+   409→  2408→    var hasTab = !!state.result;
+   410→  2409→    var loading = !!state.aiLoading;
+   411→  2410→    if (!hasAi && !hasTab && !state.resultError && !loading) { slot.innerHTML = ''; return; }
+   412→  2411→    var err = state.resultError
+   413→  2412→      ? '<div class="pb-error"><i class="fas fa-triangle-exclamation"></i> ' + esc(state.resultError) + '</div>'
+   414→  2413→      : '';
+   415→  2414→    var body = '';
+   416→  2415→    if (loading) {
+   417→  2416→      body = '<div class="pb-loading-block"><div class="pb-spinner"></div><div>AI is generating the response\u2026</div><div class="pb-loading-sub">This may take a few seconds for long documents.</div></div>';
+   418→  2417→    } else if (hasAi) {
+   419→  2418→      // AI text result — render as a styled text card. Convert newlines to <br>,
+   420→  2419→      // preserve bullet characters, escape HTML.
+   421→  2420→      var textHTML = esc(state.aiResult).replace(/\r?\n/g, '<br>');
+   422→  2421→      body = '\
+   423→  2422→        <div class="pb-ai-result-card">\
+   424→  2423→          <div class="pb-ai-result-text">' + textHTML + '</div>\
+   425→  2424→        </div>\
+   426→  2425→        <div class="pb-download-row">\
+   427→  2426→          <button class="btn btn-ghost pb-btn-sm" data-pb-download="txt" type="button"><i class="fas fa-file-lines"></i> Download as text</button>\
+   428→  2427→          <div class="pb-spacer"></div>\
+   429→  2428→          <button class="btn btn-ghost pb-btn-sm" id="pb-save-pipeline" type="button"><i class="fas fa-bookmark"></i> Save pipeline</button>\
+   430→  2429→          <button class="btn btn-primary pb-btn-sm" id="pb-email-results" type="button"><i class="fas fa-envelope"></i> Email results</button>\
+   431→  2430→        </div>';
+   432→  2431→    } else if (hasTab) {
+   433→  2432→      var r = state.result;
+   434→  2433→      body = '\
+   435→  2434→        <p class="pb-result-summary">' + r.rows.length + ' rows \u00d7 ' + r.columns.length + ' columns</p>\
+   436→  2435→        ' + renderTableHTML(r.rows, r.columns, state.visibleRows) + '\
+   437→  2436→        <div class="pb-chart-card">\
+   438→  2437→          <p class="pb-chart-title"><i class="fas fa-chart-bar"></i> Auto-chart</p>\
+   439→  2438→          <div class="pb-chart-body"></div>\
+   440→  2439→        </div>\
+   441→  2440→        <div class="pb-download-row">\
+   442→  2441→          <button class="btn btn-ghost pb-btn-sm" data-pb-download="csv" type="button"><i class="fas fa-file-csv"></i> CSV</button>\
+   443→  2442→          <button class="btn btn-ghost pb-btn-sm" data-pb-download="excel" type="button"><i class="fas fa-file-excel"></i> Excel</button>\
+   444→  2443→          <button class="btn btn-ghost pb-btn-sm" data-pb-download="pdf" type="button"><i class="fas fa-file-pdf"></i> PDF</button>\
+   445→  2444→          <button class="btn btn-ghost pb-btn-sm" data-pb-download="json" type="button"><i class="fas fa-file-code"></i> JSON</button>\
+   446→  2445→          <div class="pb-spacer"></div>\
+   447→  2446→          <button class="btn btn-ghost pb-btn-sm" id="pb-save-pipeline" type="button"><i class="fas fa-bookmark"></i> Save pipeline</button>\
+   448→  2447→          <button class="btn btn-primary pb-btn-sm" id="pb-email-results" type="button"><i class="fas fa-envelope"></i> Email results</button>\
+   449→  2448→        </div>';
+   450→  2449→    }
+   451→  2450→    slot.innerHTML = '\
+   452→  2451→      <div class="pb-card">\
+   453→  2452→        <div class="pb-card-step">Step 4</div>\
+   454→  2453→        <h3 class="pb-card-title">Results</h3>\
+   455→  2454→        ' + err + '\
+   456→  2455→        ' + body + '\
+   457→  2456→      </div>';
+   458→  2457→    if (hasTab) renderChart(slot);
+   459→  2458→  }
+   460→  2459→
+   461→  2460→  function renderSavedPipelinesCard() {
+   462→  2461→    var slot = $('pb-saved-slot');
+   463→  2462→    if (!slot) return;
+   464→  2463→    var items = state.savedPipelines.length
+   465→  2464→      ? state.savedPipelines.map(function (p) {
+   466→  2465→          return '<li class="pb-saved-item">\
+   467→  2466→            <div class="pb-saved-info">\
+   468→  2467→              <div class="pb-saved-name">' + esc(p.name) + '</div>\
+   469→  2468→              <div class="pb-saved-meta">From: ' + esc(p.docSummary) + ' \u00b7 saved ' + esc(fmtDate(p.savedAt)) + '</div>\
+   470→  2469→            </div>\
+   471→  2470→            <div class="pb-saved-actions">\
+   472→  2471→              <button class="btn btn-ghost pb-btn-sm" data-pb-load="' + p.id + '" type="button">Load</button>\
+   473→  2472→              <button class="pb-collapsible-toggle" data-pb-export="' + p.id + '" type="button" title="Download spec JSON"><i class="fas fa-download"></i></button>\
+   474→  2473→              <button class="pb-collapsible-toggle" data-pb-delete="' + p.id + '" type="button" title="Delete"><i class="fas fa-trash"></i></button>\
+   475→  2474→            </div>\
+   476→  2475→          </li>';
+   477→  2476→        }).join('')
+   478→  2477→      : '<div class="pb-empty">No saved pipelines yet \u2014 generate one above and click <strong>Save pipeline</strong>.</div>';
+   479→  2478→    slot.innerHTML = '\
+   480→  2479→      <div class="pb-card">\
+   481→  2480→        <h3 class="pb-card-title">Your saved pipelines</h3>\
+   482→  2481→        <ul class="pb-saved-list">' + items + '</ul>\
+   483→  2482→        <div class="pb-btn-row" style="margin-top:14px;">\
+   484→  2483→          <button class="btn btn-ghost pb-btn-sm" id="pb-import-pipeline" type="button"><i class="fas fa-file-import"></i> Import pipeline</button>\
+   485→  2484→          <input type="file" id="pb-import-input" accept=".json" hidden />\
+   486→  2485→        </div>\
+   487→  2486→      </div>';
+   488→  2487→  }
+   489→  2488→
+   490→  2489→  // ─── Top-level render ──────────────────────────────────────────────────────
+   491→  2490→  // Rebuilds the mount's slot skeleton, then calls each sub-renderer. Slot IDs
+   492→  2491→  // are stable so event delegation (bound once on the mount) keeps working.
+   493→  2492→  function render() {
+   494→  2493→    var mount = $(MOUNT_ID);
+   495→  2494→    if (!mount) return;
+   496→  2495→    mount.innerHTML = '\
+   497→  2496→      <div class="pb-app">\
+   498→  2497→        <div id="pb-upload-slot"></div>\
+   499→  2498→        <div id="pb-doc-slot"></div>\
+   500→  2499→        <div id="pb-instruction-slot"></div>\
+   501→  2500→        <div id="pb-pipeline-slot"></div>\
+   502→  2501→        <div id="pb-results-slot"></div>\
+   503→  2502→        <div id="pb-saved-slot"></div>\
+   504→  2503→      </div>';
+   505→  2504→    renderUploadCard();
+   506→  2505→    renderDocumentCard();
+   507→  2506→    renderInstructionCard();
+   508→  2507→    renderPipelineCard();
+   509→  2508→    renderResultsCard();
+   510→  2509→    renderSavedPipelinesCard();
+   511→  2510→  }
+   512→  2511→
+   513→  2512→  // Partial re-render — only one slot. Avoids nuking the whole mount when only
+   514→  2513→  // one card changed (keeps textarea focus + chart instance stable).
+   515→  2514→  function renderSlot(name) {
+   516→  2515→    if (name === 'upload')    renderUploadCard();
+   517→  2516→    if (name === 'document')  renderDocumentCard();
+   518→  2517→    if (name === 'instruction') renderInstructionCard();
+   519→  2518→    if (name === 'pipeline')  renderPipelineCard();
+   520→  2519→    if (name === 'results')   renderResultsCard();
+   521→  2520→    if (name === 'saved')     renderSavedPipelinesCard();
+   522→  2521→  }
+   523→  2522→
+   524→  2523→  // ─── Event handlers ─────────────────────────────────────────────────────────
+   525→  2524→
+   526→  2525→  function onFileChosen(file) {
+   527→  2526→    if (!file) return;
+   528→  2527→    if (file.size > MAX_FILE_SIZE) {
+   529→  2528→      state.analysisError = null;
+   530→  2529→      // Show error inline in the upload slot.
+   531→  2530→      var slot = $('pb-upload-slot');
+   532→  2531→      if (slot) {
+   533→  2532→        renderUploadCard();
+   534→  2533→        var card = slot.querySelector('.pb-card');
+   535→  2534→        if (card) card.insertAdjacentHTML('beforeend',
+   536→  2535→          '<div class="pb-error"><i class="fas fa-triangle-exclamation"></i> For demo performance, please use files under 5 MB.</div>');
+   537→  2536→      }
+   538→  2537→      return;
+   539→  2538→    }
+   540→  2539→    // Reset downstream state when a new document is loaded.
+   541→  2540→    state.document = null;
+   542→  2541→    state.analysis = null; state.analysisLoading = false; state.analysisError = null;
+   543→  2542→    state.pipeline = null; state.pipelineError = null; state.pipelineLoading = false;
+   544→  2543→    state.result = null; state.resultError = null; state.aiResult = null; state.aiLoading = false;
+   545→  2544→    state.visibleRows = 25;
+   546→  2545→    if (state.chart) { try { state.chart.dispose(); } catch (e) {} state.chart = null; }
+   547→  2546→    render();
+   548→  2547→    // Show a "parsing..." placeholder in the document slot.
+   549→  2548→    var slot = $('pb-doc-slot');
+   550→  2549→    if (slot) slot.innerHTML = '<div class="pb-card"><div class="pb-loading"><div class="pb-spinner"></div>Parsing your file\u2026</div></div>';
+   551→  2550→    parseFile(file).then(function (doc) {
+   552→  2551→      state.document = doc;
+   553→  2552→      renderSlot('upload');    // clears upload slot
+   554→  2553→      renderSlot('document');  // shows doc card
+   555→  2554→      renderSlot('instruction'); // shows instruction card
+   556→  2555→      // Kick off auto-analysis.
+   557→  2556→      state.analysisLoading = true;
+   558→  2557→      renderSlot('document');
+   559→  2558→      if (doc.rows.length || doc.rawText) {
+   560→  2559→        analyzeDocument(doc).then(function (analysis) {
+   561→  2560→          state.analysis = analysis;
+   562→  2561→          state.analysisLoading = false;
+   563→  2562→          renderSlot('document');
+   564→  2563→        }).catch(function (e) {
+   565→  2564→          state.analysisLoading = false;
+   566→  2565→          state.analysisError = e.message || 'Analysis failed.';
+   567→  2566→          renderSlot('document');
+   568→  2567→        });
+   569→  2568→      } else {
+   570→  2569→        state.analysisLoading = false;
+   571→  2570→        state.analysisError = 'Nothing to analyze — the document has no rows and no extractable text.';
+   572→  2571→        renderSlot('document');
+   573→  2572→      }
+   574→  2573→    }).catch(function (e) {
+   575→  2574→      // Parse failed — restore upload card with the error inline.
+   576→  2575→      state.document = null;
+   577→  2576→      renderSlot('upload');
+   578→  2577→      renderSlot('document');
+   579→  2578→      renderSlot('instruction');
+   580→  2579→      var us = $('pb-upload-slot');
+   581→  2580→      if (us) {
+   582→  2581→        var c = us.querySelector('.pb-card');
+   583→  2582→        if (c) c.insertAdjacentHTML('beforeend',
+   584→  2583→          '<div class="pb-error"><i class="fas fa-triangle-exclamation"></i> ' + esc(e.message || 'Couldn\u2019t parse this file.') + '</div>');
+   585→  2584→      }
+   586→  2585→    });
+   587→  2586→  }
+   588→  2587→
+   589→  2588→  function onSampleClick(key) {
+   590→  2589→    var tpl = SAMPLE_TEMPLATES.filter(function (t) { return t.key === key; })[0];
+   591→  2590→    if (!tpl) return;
+   592→  2591→    // Show loading state immediately (especially for the PDF sample which
+   593→  2592→    // needs fetch + pdf.js parse — takes ~500ms on first load).
+   594→  2593→    state.document = null;
+   595→  2594→    state.analysis = null; state.analysisLoading = false; state.analysisError = null;
+   596→  2595→    state.pipeline = null; state.pipelineError = null; state.pipelineLoading = false;
+   597→  2596→    state.result = null; state.resultError = null; state.aiResult = null; state.aiLoading = false;
+   598→  2597→    state.visibleRows = 25;
+   599→  2598→    if (state.chart) { try { state.chart.dispose(); } catch (e) {} state.chart = null; }
+   600→  2599→    state.sampleLoading = true;
+   601→  2600→    state.sampleLoadingError = null;
+   602→  2601→    render();
+   603→  2602→    loadSample(tpl).then(function (doc) {
+   604→  2603→      state.sampleLoading = false;
+   605→  2604→      state.document = doc;
+   606→  2605→      render();
+   607→  2606→      // Auto-analyze the document (same as onFileUploaded).
+   608→  2607→      state.analysisLoading = true;
+   609→  2608→      renderSlot('document');
+   610→  2609→      return analyzeDocument(doc);
+   611→  2610→    }).then(function (analysis) {
+   612→  2611→      state.analysis = analysis; state.analysisLoading = false;
+   613→  2612→      renderSlot('document');
+   614→  2613→    }).catch(function (e) {
+   615→  2614→      state.sampleLoading = false;
+   616→  2615→      state.analysisLoading = false;
+   617→  2616→      state.sampleLoadingError = e.message || 'Couldn\u2019t load the sample.';
+   618→  2617→      render();
+   619→  2618→    });
+   620→  2619→  }
+   621→  2620→
+   622→  2621→  function onGenerateClick() {
+   623→  2622→    if (!state.document) return;
+   624→  2623→    var instruction = (state.instruction || '').trim();
+   625→  2624→    if (!instruction) return;
+   626→  2625→    if (!canCallGroq()) {
+   627→  2626→      state.pipelineError = 'Demo rate limit reached — ' + MAX_GROQ_CALLS + ' AI calls this session. Refresh the page to try again.';
+   628→  2627→      renderSlot('instruction');
+   629→  2628→      return;
+   630→  2629→    }
+   631→  2630→    state.pipelineLoading = true; state.pipelineError = null; state.pipeline = null;
+   632→  2631→    state.result = null; state.resultError = null; state.aiResult = null; state.aiLoading = false;
+   633→  2632→    if (state.chart) { try { state.chart.dispose(); } catch (e) {} state.chart = null; }
+   634→  2633→    renderSlot('instruction'); renderSlot('pipeline'); renderSlot('results');
+   635→  2634→    generatePipelineSpec(state.document, instruction).then(function (spec) {
+   636→  2635→      state.pipeline = spec; state.pipelineLoading = false;
+   637→  2636→      renderSlot('instruction'); renderSlot('pipeline');
+   638→  2637→    }).catch(function (e) {
+   639→  2638→      state.pipelineLoading = false;
+   640→  2639→      state.pipelineError = e.message || 'Failed to generate the pipeline.';
+   641→  2640→      renderSlot('instruction');
+   642→  2641→    });
+   643→  2642→  }
+   644→  2643→
+   645→  2644→  function onRunClick() {
+   646→  2645→    if (!state.document || !state.pipeline) return;
+   647→  2646→    var spec = state.pipeline;
+   648→  2647→    // Dispatch: AI text task vs tabular pipeline. Groq picked which path
+   649→  2648→    // based on the instruction wording — we just route.
+   650→  2649→    if (spec.aiTask) {
+   651→  2650→      state.aiLoading = true; state.aiResult = null; state.resultError = null;
+   652→  2651→      state.result = null;  // clear any prior tabular result
+   653→  2652→      renderSlot('results');
+   654→  2653→      executeAITask(state.document, spec.aiTask).then(function (text) {
+   655→  2654→        state.aiLoading = false;
+   656→  2655→        state.aiResult = text;
+   657→  2656→        renderSlot('results');
+   658→  2657→      }).catch(function (e) {
+   659→  2658→        state.aiLoading = false;
+   660→  2659→        state.aiResult = null;
+   661→  2660→        state.resultError = e.message || 'AI task failed.';
+   662→  2661→        renderSlot('results');
+   663→  2662→      });
+   664→  2663→    } else {
+   665→  2664→      try {
+   666→  2665→        var res = executePipeline(state.document, spec);
+   667→  2666→        state.result = res; state.resultError = null;
+   668→  2667→        state.aiResult = null;  // clear any prior AI result
+   669→  2668→        state.visibleRows = 25;
+   670→  2669→        renderSlot('results');
+   671→  2670→      } catch (e) {
+   672→  2671→        state.result = null; state.resultError = e.message || 'Pipeline execution failed.';
+   673→  2672→        renderSlot('results');
+   674→  2673→      }
+   675→  2674→    }
+   676→  2675→  }
+   677→  2676→
+   678→  2677→  function onDownloadClick(kind) {
+   679→  2678→    // 'txt' is for AI text-task results — download the AI output as a plain-text file.
+   680→  2679→    if (kind === 'txt' && state.aiResult != null) {
+   681→  2680→      var blob = new Blob([state.aiResult], { type: 'text/plain;charset=utf-8' });
+   682→  2681→      var url = URL.createObjectURL(blob);
+   683→  2682→      var a = document.createElement('a');
+   684→  2683→      a.href = url;
+   685→  2684→      a.download = (state.pipeline && state.pipeline.name ? state.pipeline.name.replace(/[^a-z0-9]+/gi, '_').toLowerCase() : 'ai_result') + '.txt';
+   686→  2685→      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+   687→  2686→      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+   688→  2687→      return;
+   689→  2688→    }
+   690→  2689→    if (!state.result) return;
+   691→  2690→    var rows = state.result.rows, cols = state.result.columns;
+   692→  2691→    if (kind === 'csv')   downloadCSV(rows, cols);
+   693→  2692→    else if (kind === 'excel') downloadExcel(rows, cols).catch(function () { alertSafe('Excel export failed — the library may not have loaded.'); });
+   694→  2693→    else if (kind === 'pdf')   downloadPDF(rows, cols, 'pipeline-result.pdf', state.pipeline ? state.pipeline.name : 'Pipeline Result').catch(function () { alertSafe('PDF export failed — the library may not have loaded.'); });
+   695→  2694→    else if (kind === 'json') downloadJSON(state.pipeline, 'pipeline-spec.json');
+   696→  2695→  }
+   697→  2696→
+   698→  2697→  function alertSafe(msg) {
+   699→  2698→    // Inline notice — no alert(). Reuses the saved-pipelines card as a fallback surface.
+   700→  2699→    var slot = $('pb-results-slot');
+
+[showing lines 1-700 of 702; use offset=701 with limit to continue reading]

@@ -1,0 +1,502 @@
+   900→   900→  function tokenizeExpr(expr) {
+   901→   901→    var tokens = [];
+   902→   902→    var i = 0, len = expr.length;
+   903→   903→    while (i < len) {
+   904→   904→      var c = expr[i];
+   905→   905→      if (c === ' ' || c === '\t' || c === '\n' || c === '\r') { i++; continue; }
+   906→   906→      // Number literal — digits and at most one decimal point.
+   907→   907→      if ((c >= '0' && c <= '9') || c === '.') {
+   908→   908→        var num = '';
+   909→   909→        var dotSeen = false;
+   910→   910→        while (i < len && ((expr[i] >= '0' && expr[i] <= '9') || expr[i] === '.')) {
+   911→   911→          if (expr[i] === '.') {
+   912→   912→            if (dotSeen) break;
+   913→   913→            dotSeen = true;
+   914→   914→          }
+   915→   915→          num += expr[i]; i++;
+   916→   916→        }
+   917→   917→        var n = parseFloat(num);
+   918→   918→        if (isNaN(n)) throw new Error('Invalid number in expression: ' + num);
+   919→   919→        tokens.push({ type: 'num', value: n });
+   920→   920→        continue;
+   921→   921→      }
+   922→   922→      // Single-quoted string literal — doubled '' inside means an escaped quote.
+   923→   923→      if (c === "'") {
+   924→   924→        var str = '';
+   925→   925→        i++; // skip opening quote
+   926→   926→        while (i < len && expr[i] !== "'") { str += expr[i]; i++; }
+   927→   927→        if (i >= len) throw new Error('Unterminated string literal in expression');
+   928→   928→        i++; // skip closing quote
+   929→   929→        tokens.push({ type: 'str', value: str });
+   930→   930→        continue;
+   931→   931→      }
+   932→   932→      // Identifier — letters, digits, underscore (must start with letter/underscore).
+   933→   933→      if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c === '_') {
+   934→   934→        var id = '';
+   935→   935→        while (i < len && ((expr[i] >= 'a' && expr[i] <= 'z') ||
+   936→   936→                           (expr[i] >= 'A' && expr[i] <= 'Z') ||
+   937→   937→                           (expr[i] >= '0' && expr[i] <= '9') || expr[i] === '_')) {
+   938→   938→          id += expr[i]; i++;
+   939→   939→        }
+   940→   940→        tokens.push({ type: 'id', value: id });
+   941→   941→        continue;
+   942→   942→      }
+   943→   943→      // Operators + parens.
+   944→   944→      if ('+-*/%()'.indexOf(c) >= 0) { tokens.push({ type: 'op', value: c }); i++; continue; }
+   945→   945→      throw new Error('Invalid character in expression: ' + c);
+   946→   946→    }
+   947→   947→    return tokens;
+   948→   948→  }
+   949→   949→
+   950→   950→  // Recursive-descent parser → AST nodes:
+   951→   951→  //   { type: 'literal', value: <number|string> }
+   952→   952→  //   { type: 'column',  name: <string> }
+   953→   953→  //   { type: 'binop',   op: '+'|'-'|'*'|'/'|'%', left: <node>, right: <node> }
+   954→   954→  function parseExpr(tokens) {
+   955→   955→    var pos = 0;
+   956→   956→    function peek() { return tokens[pos]; }
+   957→   957→    function next() { return tokens[pos++]; }
+   958→   958→    function parseExpression() {
+   959→   959→      var node = parseTerm();
+   960→   960→      while (peek() && peek().type === 'op' && (peek().value === '+' || peek().value === '-')) {
+   961→   961→        var op = next().value;
+   962→   962→        var right = parseTerm();
+   963→   963→        node = { type: 'binop', op: op, left: node, right: right };
+   964→   964→      }
+   965→   965→      return node;
+   966→   966→    }
+   967→   967→    function parseTerm() {
+   968→   968→      var node = parseFactor();
+   969→   969→      while (peek() && peek().type === 'op' &&
+   970→   970→             (peek().value === '*' || peek().value === '/' || peek().value === '%')) {
+   971→   971→        var op = next().value;
+   972→   972→        var right = parseFactor();
+   973→   973→        node = { type: 'binop', op: op, left: node, right: right };
+   974→   974→      }
+   975→   975→      return node;
+   976→   976→    }
+   977→   977→    function parseFactor() {
+   978→   978→      var t = peek();
+   979→   979→      if (!t) throw new Error('Unexpected end of expression');
+   980→   980→      if (t.type === 'num' || t.type === 'str') { next(); return { type: 'literal', value: t.value }; }
+   981→   981→      if (t.type === 'id') { next(); return { type: 'column', name: t.value }; }
+   982→   982→      if (t.type === 'op' && t.value === '(') {
+   983→   983→        next();
+   984→   984→        var node = parseExpression();
+   985→   985→        if (!peek() || peek().value !== ')') throw new Error('Missing closing parenthesis');
+   986→   986→        next(); // consume ')'
+   987→   987→        return node;
+   988→   988→      }
+   989→   989→      throw new Error('Unexpected token in expression: ' + t.value);
+   990→   990→    }
+   991→   991→    var ast = parseExpression();
+   992→   992→    if (pos < tokens.length) throw new Error('Unexpected trailing tokens in expression');
+   993→   993→    return ast;
+   994→   994→  }
+   995→   995→
+   996→   996→  // Evaluate an AST node against a row object. The '+' operator is polymorphic:
+   997→   997→  // if either operand is a string, both sides stringify and concatenate; else
+   998→   998→  // numeric addition. All other operators are numeric only.
+   999→   999→  function evalAst(node, row) {
+  1000→  1000→    if (node.type === 'literal') return node.value;
+  1001→  1001→    if (node.type === 'column') {
+  1002→  1002→      if (!(node.name in row)) throw new Error('Unknown column in expression: ' + node.name);
+  1003→  1003→      return row[node.name];
+  1004→  1004→    }
+  1005→  1005→    if (node.type === 'binop') {
+  1006→  1006→      var l = evalAst(node.left, row);
+  1007→  1007→      var r = evalAst(node.right, row);
+  1008→  1008→      if (node.op === '+' && (typeof l === 'string' || typeof r === 'string')) {
+  1009→  1009→        return String(l) + String(r);
+  1010→  1010→      }
+  1011→  1011→      var ln = Number(l), rn = Number(r);
+  1012→  1012→      if (isNaN(ln) || isNaN(rn)) throw new Error('Non-numeric operand in arithmetic expression');
+  1013→  1013→      switch (node.op) {
+  1014→  1014→        case '+': return ln + rn;
+  1015→  1015→        case '-': return ln - rn;
+  1016→  1016→        case '*': return ln * rn;
+  1017→  1017→        case '/': return rn === 0 ? 0 : ln / rn;
+  1018→  1018→        case '%': return rn === 0 ? 0 : ln % rn;
+  1019→  1019→      }
+  1020→  1020→      throw new Error('Unknown operator: ' + node.op);
+  1021→  1021→    }
+  1022→  1022→    throw new Error('Cannot evaluate AST node: ' + node.type);
+  1023→  1023→  }
+  1024→  1024→
+  1025→  1025→  // Public façade — tokenize + parse + evaluate. AST is cached per expression
+  1026→  1026→  // (via the closure on the parsed result) so per-row evaluation skips parsing.
+  1027→  1027→  function makeExprEvaluator(expression) {
+  1028→  1028→    var tokens = tokenizeExpr(expression);
+  1029→  1029→    var ast = parseExpr(tokens);
+  1030→  1030→    return function (row) { return evalAst(ast, row); };
+  1031→  1031→  }
+  1032→  1032→
+  1033→  1033→  // ─── Case-insensitive column resolver ──────────────────────────────────────
+  1034→  1034→  // Groq frequently returns column names in a DIFFERENT CASE than the actual
+  1035→  1035→  // data — e.g. valueColumn: "QTY" when the data has lowercase "qty", or
+  1036→  1036→  // "Revenue" when the data has "revenue". Without a resolver, r["QTY"]
+  1037→  1037→  // returns undefined → Number(undefined) is NaN → NaN propagates through
+  1038→  1038→  // sum/avg/min/max → the entire result column shows as NaN.
+  1039→  1039→  //
+  1040→  1040→  // The resolver: exact match first, case-insensitive match second, falls
+  1041→  1041→  // back to the original name (so undefined values surface the bug visibly
+  1042→  1042→  // in the result — better than silently failing).
+  1043→  1043→  var _colLookupCache = {};
+  1044→  1044→  function resolveColumn(name, docColumns) {
+  1045→  1045→    if (!name) return name;
+  1046→  1046→    if (docColumns.indexOf(name) >= 0) return name;
+  1047→  1047→    var cacheKey = name.toLowerCase() + '\u0001' + docColumns.join('\u0001');
+  1048→  1048→    if (_colLookupCache[cacheKey]) return _colLookupCache[cacheKey];
+  1049→  1049→    var lower = name.toLowerCase();
+  1050→  1050→    for (var i = 0; i < docColumns.length; i++) {
+  1051→  1051→      if (docColumns[i].toLowerCase() === lower) {
+  1052→  1052→        _colLookupCache[cacheKey] = docColumns[i];
+  1053→  1053→        return docColumns[i];
+  1054→  1054→      }
+  1055→  1055→    }
+  1056→  1056→    _colLookupCache[cacheKey] = name;
+  1057→  1057→    return name;
+  1058→  1058→  }
+  1059→  1059→
+  1060→  1060→  // ─── AI text-task executor (summary / bullet_points / Q&A) ────────────────
+  1061→  1061→  // Used when the spec has `aiTask` instead of `steps[]`. Calls Groq with a
+  1062→  1062→  // task-specific prompt, using the document content as context. Returns a
+  1063→  1063→  // string (the AI-generated summary / bulleted list / answer).
+  1064→  1064→  //
+  1065→  1065→  // Document content passed to Groq:
+  1066→  1066→  //   - For row-based docs (Excel/CSV): first 30 rows as JSON
+  1067→  1067→  //   - For text docs (PDF/Word): first 4000 chars of rawText
+  1068→  1068→  //   - For PDFs with detected tables: both the raw text AND the first 30 rows
+  1069→  1069→  function executeAITask(doc, aiTask) {
+  1070→  1070→    var docContent;
+  1071→  1071→    if (doc.rows && doc.rows.length) {
+  1072→  1072→      docContent = 'First 30 rows of the document (JSON):\n' +
+  1073→  1073→        JSON.stringify(doc.rows.slice(0, 30));
+  1074→  1074→      if (doc.rawText && doc.rawText.length > 10) {
+  1075→  1075→        docContent += '\n\nAdditional document text (first 2000 chars):\n' +
+  1076→  1076→          doc.rawText.slice(0, 2000);
+  1077→  1077→      }
+  1078→  1078→    } else if (doc.rawText) {
+  1079→  1079→      docContent = 'Document text (first 4000 chars):\n' + doc.rawText.slice(0, 4000);
+  1080→  1080→    } else {
+  1081→  1081→      docContent = '(empty document — no extractable content)';
+  1082→  1082→    }
+  1083→  1083→
+  1084→  1084→    var taskType = aiTask.type || 'summary';
+  1085→  1085→    var systemPrompt, userPrompt;
+  1086→  1086→
+  1087→  1087→    if (taskType === 'qa') {
+  1088→  1088→      var question = aiTask.question || 'What is this document about?';
+  1089→  1089→      systemPrompt = 'You are an analyst answering questions about a document. ' +
+  1090→  1090→        'Answer using only information from the document. Be specific. ' +
+  1091→  1091→        'If the document does not contain the answer, say so honestly. ' +
+  1092→  1092→        '2-4 sentences, plain text, no markdown, no headers.';
+  1093→  1093→      userPrompt = 'Document: ' + doc.name + ' (' + doc.type + ')\n\n' +
+  1094→  1094→        docContent + '\n\n' +
+  1095→  1095→        'Question: ' + question + '\n\n' +
+  1096→  1096→        'Answer:';
+  1097→  1097→    } else if (taskType === 'bullet_points') {
+  1098→  1098→      var count = aiTask.count || 6;
+  1099→  1099→      systemPrompt = 'You are an analyst extracting main points from a document. ' +
+  1100→  1100→        'List ' + count + ' main points as a bulleted list. ' +
+  1101→  1101→        'Each point: one sentence, a specific fact / trend / insight from the document. ' +
+  1102→  1102→        'Output: one bullet per line, each starting with \u2022 (a bullet character). ' +
+  1103→  1103→        'No markdown headers, no intro paragraph, just the bulleted list.';
+  1104→  1104→      userPrompt = 'Document: ' + doc.name + ' (' + doc.type + ')\n\n' +
+  1105→  1105→        docContent + '\n\n' +
+  1106→  1106→        'List ' + count + ' main points:';
+  1107→  1107→    } else {
+  1108→  1108→      // summary (default)
+  1109→  1109→      var lengthHint = aiTask.length === 'short' ? '1 paragraph (3-4 sentences)' :
+  1110→  1110→                       aiTask.length === 'long' ? '3-4 paragraphs' :
+  1111→  1111→                       '2 paragraphs (4-6 sentences total)';
+  1112→  1112→      systemPrompt = 'You are an analyst writing a plain-English summary of a document. ' +
+  1113→  1113→        'Capture the document\'s purpose, key data points, notable patterns, and any anomalies. ' +
+  1114→  1114→        'Write ' + lengthHint + '. ' +
+  1115→  1115→        'Plain text, no markdown, no headers, just paragraphs.';
+  1116→  1116→      userPrompt = 'Document: ' + doc.name + ' (' + doc.type + ')\n\n' +
+  1117→  1117→        docContent + '\n\n' +
+  1118→  1118→        'Summary:';
+  1119→  1119→    }
+  1120→  1120→
+  1121→  1121→    return callGroq(
+  1122→  1122→      [{ role: 'system', content: systemPrompt },
+  1123→  1123→       { role: 'user', content: userPrompt }],
+  1124→  1124→      { temperature: 0.3, max_tokens: 800 }
+  1125→  1125→    ).then(function (content) {
+  1126→  1126→      return (content || '').trim();
+  1127→  1127→    });
+  1128→  1128→  }
+  1129→  1129→
+  1130→  1130→  // ─── Pipeline executor ─────────────────────────────────────────────────────
+  1131→  1131→  // Runs each step in order over a shallow-cloned row array. Each step mutates
+  1132→  1132→  // the array (filter shortens, summarize reshapes, sort reorders, etc.). The
+  1133→  1133→  // final shape is returned to the renderer.
+  1134→  1134→  function executePipeline(doc, spec) {
+  1135→  1135→    var rows = (doc.rows || []).slice();
+  1136→  1136→    var docCols = doc.columns || (rows.length ? Object.keys(rows[0]) : []);
+  1137→  1137→    _colLookupCache = {};  // reset per-execution
+  1138→  1138→    (spec.steps || []).forEach(function (step) {
+  1139→  1139→      if (step.type === 'filter') {
+  1140→  1140→        var fCol = resolveColumn(step.column, docCols);
+  1141→  1141→        rows = rows.filter(function (r) {
+  1142→  1142→          var v = r[fCol];
+  1143→  1143→          switch (step.operator) {
+  1144→  1144→            case '==':  return String(v) == String(step.value);
+  1145→  1145→            case '!=':  return String(v) != String(step.value);
+  1146→  1146→            case '>':   return Number(v) >  Number(step.value);
+  1147→  1147→            case '<':   return Number(v) <  Number(step.value);
+  1148→  1148→            case '>=':  return Number(v) >= Number(step.value);
+  1149→  1149→            case '<=':  return Number(v) <= Number(step.value);
+  1150→  1150→            case 'contains':
+  1151→  1151→              return String(v).toLowerCase().indexOf(String(step.value).toLowerCase()) >= 0;
+  1152→  1152→            default: return true;
+  1153→  1153→          }
+  1154→  1154→        });
+  1155→  1155→      } else if (step.type === 'summarize') {
+  1156→  1156→        var groupByRaw = step.groupBy && step.groupBy.length ? step.groupBy : [];
+  1157→  1157→        var groupBy = groupByRaw.map(function (c) { return resolveColumn(c, docCols); });
+  1158→  1158→        var valCol = step.valueColumn ? resolveColumn(step.valueColumn, docCols) : null;
+  1159→  1159→        var groups = {};
+  1160→  1160→        var order = [];
+  1161→  1161→        rows.forEach(function (r) {
+  1162→  1162→          var key = groupBy.map(function (c) { return r[c]; }).join(' | ');
+  1163→  1163→          if (!groups[key]) { groups[key] = { count: 0, sum: 0, min: Infinity, max: -Infinity }; order.push(key); }
+  1164→  1164→          var g = groups[key];
+  1165→  1165→          var val = valCol ? Number(r[valCol]) : 0;
+  1166→  1166→          if (isNaN(val)) val = 0;  // guard against NaN propagation
+  1167→  1167→          g.count++;
+  1168→  1168→          if (valCol) {
+  1169→  1169→            g.sum += val;
+  1170→  1170→            g.min = Math.min(g.min, val);
+  1171→  1171→            g.max = Math.max(g.max, val);
+  1172→  1172→          }
+  1173→  1173→        });
+  1174→  1174→        rows = order.map(function (key) {
+  1175→  1175→          var g = groups[key];
+  1176→  1176→          var parts = key.split(' | ');
+  1177→  1177→          var row = {};
+  1178→  1178→          groupBy.forEach(function (c, i) { row[c] = parts[i]; });
+  1179→  1179→          if (valCol) {
+  1180→  1180→            var agg = step.aggregation || 'sum';
+  1181→  1181→            row[agg + '_of_' + valCol] =
+  1182→  1182→              agg === 'sum'   ? g.sum :
+  1183→  1183→              agg === 'count' ? g.count :
+  1184→  1184→              agg === 'avg'   ? (g.count ? g.sum / g.count : 0) :
+  1185→  1185→              agg === 'min'   ? (g.min === Infinity ? 0 : g.min) :
+  1186→  1186→              agg === 'max'   ? (g.max === -Infinity ? 0 : g.max) : null;
+  1187→  1187→          } else {
+  1188→  1188→            row.count = g.count;
+  1189→  1189→          }
+  1190→  1190→          return row;
+  1191→  1191→        });
+  1192→  1192→      } else if (step.type === 'sort') {
+  1193→  1193→        var sCol = resolveColumn(step.column, docCols);
+  1194→  1194→        var order2 = step.order === 'desc' ? -1 : 1;
+  1195→  1195→        rows.sort(function (a, b) {
+  1196→  1196→          var av = a[sCol], bv = b[sCol];
+  1197→  1197→          if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * order2;
+  1198→  1198→          return order2 * String(av).localeCompare(String(bv));
+  1199→  1199→        });
+  1200→  1200→      } else if (step.type === 'limit') {
+  1201→  1201→        rows = rows.slice(0, Math.max(0, step.count | 0));
+  1202→  1202→      } else if (step.type === 'select') {
+  1203→  1203→        var selColsRaw = step.columns || [];
+  1204→  1204→        var selCols = selColsRaw.map(function (c) { return resolveColumn(c, docCols); });
+  1205→  1205→        rows = rows.map(function (r) {
+  1206→  1206→          var o = {};
+  1207→  1207→          selCols.forEach(function (c) { o[c] = r[c]; });
+  1208→  1208→          return o;
+  1209→  1209→        });
+  1210→  1210→      } else if (step.type === 'transform') {
+  1211→  1211→        // Build the evaluator ONCE, then map — parsing per row would be wasteful.
+  1212→  1212→        var evalFn;
+  1213→  1213→        try { evalFn = makeExprEvaluator(step.expression); }
+  1214→  1214→        catch (e) { throw new Error('Transform step has an invalid expression: ' + e.message); }
+  1215→  1215→        var newCol = step.newColumn || 'computed';
+  1216→  1216→        rows = rows.map(function (r) {
+  1217→  1217→          var o = Object.assign({}, r);
+  1218→  1218→          try { o[newCol] = evalFn(r); } catch (e) { o[newCol] = ''; }
+  1219→  1219→          return o;
+  1220→  1220→        });
+  1221→  1221→      }
+  1222→  1222→      // Unknown step types are silently skipped — the spec validator already
+  1223→  1223→      // filtered out garbage, so this is a defensive no-op.
+  1224→  1224→    });
+  1225→  1225→    return { rows: rows, columns: rows.length ? Object.keys(rows[0]) : [] };
+  1226→  1226→  }
+  1227→  1227→
+  1228→  1228→  // ─── Theme helpers (mirror blog-markets-dashboard pattern) ──────────────────
+  1229→  1229→  // Reads <html data-theme> dynamically and falls back to 'dark'. The mount
+  1230→  1230→  // may override via data-pb-theme (escape hatch for blog posts that want a
+  1231→  1231→  // fixed demo theme independent of the site toggle).
+  1232→  1232→  function getTheme() {
+  1233→  1233→    var mount = $(MOUNT_ID);
+  1234→  1234→    if (mount) {
+  1235→  1235→      var t = mount.getAttribute('data-pb-theme');
+  1236→  1236→      if (t === 'light' || t === 'dark') return t;
+  1237→  1237→    }
+  1238→  1238→    var html = document.documentElement.getAttribute('data-theme');
+  1239→  1239→    return html === 'light' ? 'light' : 'dark';
+  1240→  1240→  }
+  1241→  1241→  function axisLabelColor() { return getTheme() === 'dark' ? '#a8b3c7' : '#475569'; }
+  1242→  1242→  function tooltipBgColor() { return getTheme() === 'dark' ? 'rgba(15,23,42,.95)' : 'rgba(255,255,255,.97)'; }
+  1243→  1243→  function tooltipTextColor() { return getTheme() === 'dark' ? '#e6edf7' : '#0f172a'; }
+  1244→  1244→  function chartGridColor() { return getTheme() === 'dark' ? 'rgba(255,255,255,.07)' : 'rgba(15,23,42,.07)'; }
+  1245→  1245→
+  1246→  1246→  // ─── CSS injection ──────────────────────────────────────────────────────────
+  1247→  1247→  // All pipeline-builder-specific CSS lives in a single injected <style> block,
+  1248→  1248→  // scoped with the .pb- prefix so it can't clash with the site stylesheet.
+  1249→  1249→  // Reuses the site's design tokens (--bg, --surface, --border, --text, etc.)
+  1250→  1250→  // and the site's .btn / .btn-primary / .btn-ghost classes (defined globally).
+  1251→  1251→  function injectCSS() {
+  1252→  1252→    if ($('pb-style')) return;
+  1253→  1253→    var css = '\
+  1254→  1254→.pb-app { font-family: var(--font-body); color: var(--text); max-width: 980px; margin: 0 auto; padding: 0; }\
+  1255→  1255→.pb-app * { box-sizing: border-box; }\
+  1256→  1256→.pb-card {\
+  1257→  1257→  background: var(--surface);\
+  1258→  1258→  border: 1px solid var(--border);\
+  1259→  1259→  border-radius: var(--radius);\
+  1260→  1260→  padding: 24px;\
+  1261→  1261→  margin-bottom: 20px;\
+  1262→  1262→  box-shadow: var(--shadow-sm);\
+  1263→  1263→}\
+  1264→  1264→.pb-card-title {\
+  1265→  1265→  font-family: var(--font-head);\
+  1266→  1266→  font-size: 1.15rem;\
+  1267→  1267→  font-weight: 700;\
+  1268→  1268→  margin: 0 0 4px;\
+  1269→  1269→  letter-spacing: -0.01em;\
+  1270→  1270→  color: var(--text);\
+  1271→  1271→}\
+  1272→  1272→.pb-card-sub { color: var(--text-soft); font-size: 0.88rem; margin: 0 0 18px; }\
+  1273→  1273→.pb-card-step {\
+  1274→  1274→  display: inline-block;\
+  1275→  1275→  font-family: var(--font-head);\
+  1276→  1276→  font-size: 0.7rem;\
+  1277→  1277→  font-weight: 600;\
+  1278→  1278→  letter-spacing: 0.08em;\
+  1279→  1279→  text-transform: uppercase;\
+  1280→  1280→  color: var(--indigo);\
+  1281→  1281→  margin-bottom: 6px;\
+  1282→  1282→}\
+  1283→  1283→.pb-drop {\
+  1284→  1284→  border: 2px dashed var(--border-strong);\
+  1285→  1285→  border-radius: var(--radius);\
+  1286→  1286→  padding: 36px 24px;\
+  1287→  1287→  text-align: center;\
+  1288→  1288→  cursor: pointer;\
+  1289→  1289→  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);\
+  1290→  1290→  background: var(--bg-alt);\
+  1291→  1291→}\
+  1292→  1292→.pb-drop:hover, .pb-drop.pb-dragover {\
+  1293→  1293→  border-color: var(--indigo);\
+  1294→  1294→  background: linear-gradient(135deg, rgba(99,102,241,0.06), rgba(6,182,212,0.06));\
+  1295→  1295→}\
+  1296→  1296→.pb-drop-icon { font-size: 2rem; color: var(--indigo); margin-bottom: 8px; }\
+  1297→  1297→.pb-drop-text { color: var(--text); font-weight: 600; margin-bottom: 4px; }\
+  1298→  1298→.pb-drop-hint { color: var(--text-soft); font-size: 0.82rem; }\
+  1299→  1299→.pb-divider {\
+  1300→  1300→  display: flex; align-items: center; gap: 12px;\
+  1301→  1301→  color: var(--text-soft); font-size: 0.82rem; margin: 22px 0 14px;\
+  1302→  1302→}\
+  1303→  1303→.pb-divider::before, .pb-divider::after {\
+  1304→  1304→  content: ""; flex: 1; height: 1px; background: var(--border);\
+  1305→  1305→}\
+  1306→  1306→.pb-sample-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }\
+  1307→  1307→.pb-sample {\
+  1308→  1308→  background: var(--bg-alt);\
+  1309→  1309→  border: 1px solid var(--border);\
+  1310→  1310→  border-radius: var(--radius-sm);\
+  1311→  1311→  padding: 14px;\
+  1312→  1312→  cursor: pointer;\
+  1313→  1313→  text-align: left;\
+  1314→  1314→  transition: transform 0.2s var(--ease), border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);\
+  1315→  1315→  font-family: inherit; color: var(--text); width: 100%;\
+  1316→  1316→}\
+  1317→  1317→.pb-sample:hover { transform: translateY(-2px); border-color: var(--indigo); box-shadow: 0 12px 26px -14px rgba(99,102,241,0.5); }\
+  1318→  1318→.pb-sample-icon { color: var(--indigo); font-size: 1.1rem; margin-bottom: 6px; }\
+  1319→  1319→.pb-sample-name { font-weight: 600; font-size: 0.92rem; }\
+  1320→  1320→.pb-sample-meta { color: var(--text-soft); font-size: 0.78rem; margin-top: 2px; }\
+  1321→  1321→@media (max-width: 720px) { .pb-sample-grid { grid-template-columns: 1fr; } }\
+  1322→  1322→\
+  1323→  1323→.pb-doc-head { display: flex; align-items: center; gap: 14px; }\
+  1324→  1324→.pb-doc-icon {\
+  1325→  1325→  width: 44px; height: 44px; border-radius: var(--radius-sm);\
+  1326→  1326→  background: linear-gradient(135deg, rgba(99,102,241,0.16), rgba(6,182,212,0.16));\
+  1327→  1327→  display: flex; align-items: center; justify-content: center;\
+  1328→  1328→  color: var(--indigo); font-size: 1.2rem; flex-shrink: 0;\
+  1329→  1329→}\
+  1330→  1330→.pb-doc-name { font-weight: 600; color: var(--text); }\
+  1331→  1331→.pb-doc-meta { color: var(--text-soft); font-size: 0.82rem; }\
+  1332→  1332→.pb-link { background: none; border: none; color: var(--indigo); cursor: pointer; font-size: 0.85rem; padding: 0; text-decoration: underline; font-family: inherit; }\
+  1333→  1333→.pb-link:hover { color: var(--cyan); }\
+  1334→  1334→\
+  1335→  1335→.pb-textarea {\
+  1336→  1336→  width: 100%; min-height: 96px; resize: vertical;\
+  1337→  1337→  background: var(--bg-alt); border: 1px solid var(--border-strong);\
+  1338→  1338→  border-radius: var(--radius-sm); padding: 12px 14px;\
+  1339→  1339→  color: var(--text); font-family: var(--font-body); font-size: 0.95rem; line-height: 1.5;\
+  1340→  1340→  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);\
+  1341→  1341→}\
+  1342→  1342→.pb-textarea:focus { outline: none; border-color: var(--indigo); box-shadow: var(--ring); }\
+  1343→  1343→\
+  1344→  1344→.pb-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 16px; }\
+  1345→  1345→.pb-chip-exec { background: linear-gradient(135deg, #4338ca, #0e7490); color: #fff; border-color: transparent; box-shadow: 0 4px 12px -4px rgba(67,56,202,0.45); }\
+  1346→  1346→.pb-chip-exec:hover { transform: translateY(-1px); box-shadow: 0 6px 16px -6px rgba(67,56,202,0.6); }\
+  1347→  1347→.pb-chip {\
+  1348→  1348→  background: var(--bg-alt); border: 1px solid var(--border);\
+  1349→  1349→  border-radius: 999px; padding: 7px 14px; cursor: pointer;\
+  1350→  1350→  font-size: 0.82rem; color: var(--text-muted); font-family: inherit;\
+  1351→  1351→  transition: border-color 0.2s var(--ease), color 0.2s var(--ease), background 0.2s var(--ease);\
+  1352→  1352→}\
+  1353→  1353→.pb-chip:hover { border-color: var(--indigo); color: var(--indigo); background: rgba(99,102,241,0.06); }\
+  1354→  1354→\
+  1355→  1355→.pb-btn-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }\
+  1356→  1356→.pb-btn-sm { min-height: 38px; padding: 8px 16px; font-size: 0.85rem; border-radius: 999px; }\
+  1357→  1357→.pb-btn-row .pb-spacer { flex: 1; }\
+  1358→  1358→\
+  1359→  1359→.pb-step-list { list-style: none; padding: 0; margin: 12px 0 0; }\
+  1360→  1360→.pb-step-item { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }\
+  1361→  1361→.pb-step-item:first-child { border-top: none; padding-top: 4px; }\
+  1362→  1362→.pb-step-num {\
+  1363→  1363→  flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;\
+  1364→  1364→  background: var(--gradient); color: #fff; font-size: 0.78rem; font-weight: 700;\
+  1365→  1365→  display: flex; align-items: center; justify-content: center; font-family: var(--font-head);\
+  1366→  1366→}\
+  1367→  1367→.pb-step-body { flex: 1; min-width: 0; }\
+  1368→  1368→.pb-step-type {\
+  1369→  1369→  display: inline-block; font-family: var(--font-head); font-size: 0.68rem; font-weight: 600;\
+  1370→  1370→  text-transform: uppercase; letter-spacing: 0.06em;\
+  1371→  1371→  background: rgba(99,102,241,0.12); color: var(--indigo);\
+  1372→  1372→  padding: 2px 8px; border-radius: 6px; margin-bottom: 4px;\
+  1373→  1373→}\
+  1374→  1374→.pb-step-desc { color: var(--text); font-size: 0.92rem; margin: 0 0 4px; }\
+  1375→  1375→.pb-step-params { color: var(--text-soft); font-size: 0.78rem; font-family: var(--font-body); word-break: break-word; }\
+  1376→  1376→\
+  1377→  1377→.pb-collapsible-toggle {\
+  1378→  1378→  background: none; border: 1px solid var(--border); color: var(--text-muted);\
+  1379→  1379→  padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.8rem;\
+  1380→  1380→  font-family: inherit; display: inline-flex; align-items: center; gap: 6px;\
+  1381→  1381→}\
+  1382→  1382→.pb-collapsible-toggle:hover { border-color: var(--indigo); color: var(--indigo); }\
+  1383→  1383→.pb-pre {\
+  1384→  1384→  background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--radius-sm);\
+  1385→  1385→  padding: 14px; overflow: auto; margin: 12px 0 0; font-size: 0.78rem; line-height: 1.5;\
+  1386→  1386→  color: var(--text-muted); max-height: 320px; white-space: pre; font-family: "SFMono-Regular", Consolas, monospace;\
+  1387→  1387→}\
+  1388→  1388→\
+  1389→  1389→.pb-result-summary { color: var(--text-soft); font-size: 0.85rem; margin: 0 0 14px; }\
+  1390→  1390→.pb-table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); max-height: 520px; }\
+  1391→  1391→.pb-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }\
+  1392→  1392→.pb-table th, .pb-table td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }\
+  1393→  1393→.pb-table th {\
+  1394→  1394→  background: var(--bg-alt); color: var(--text-muted); font-family: var(--font-head);\
+  1395→  1395→  font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em;\
+  1396→  1396→  position: sticky; top: 0; z-index: 1;\
+  1397→  1397→}\
+  1398→  1398→.pb-table td.num { text-align: right; font-variant-numeric: tabular-nums; }\
+  1399→  1399→.pb-table tbody tr:hover { background: rgba(99,102,241,0.04); }\
+
+[showing lines 900-1399 of 2002; use offset=1400 with limit to continue reading]

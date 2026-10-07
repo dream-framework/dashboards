@@ -1,0 +1,2002 @@
+     1→/* ════════════════════════════════════════════════════════════════════════════
+     2→   blog-pipeline-builder.js — AI-assisted pipeline constructor (marketing demo)
+     3→
+     4→   Mounts INTO <div id="pipeline-builder-mount"></div> when the DOM is ready.
+     5→   Pure vanilla JS, no framework. Everything wrapped in an IIFE — no globals
+     6→   leaked to window.
+     7→
+     8→   Flow
+     9→   ----
+    10→     1. User uploads .xlsx / .xls / .docx / .pdf / .csv — OR picks one of 3
+    11→        embedded sample templates (no upload required).
+    12→     2. The document is parsed client-side into a unified doc object
+    13→        { type, rows, columns, rawText, ... }.
+    14→     3. A sample is sent to Groq (via the Netlify proxy — never direct) for
+    15→        auto-analysis: document type, summary, key columns, suggested NL
+    16→        actions, data-quality notes. Suggested actions render as clickable
+    17→        chips that prefill the instruction textarea.
+    18→     4. User types a natural-language instruction (or clicks a chip) and hits
+    19→        "Generate pipeline". Groq returns a JSON pipeline spec.
+    20→     5. The spec renders as a human-readable card (ordered steps, output
+    21→        format) with a collapsible raw-JSON view.
+    22→     6. User clicks "Run pipeline". The spec executes client-side — filter,
+    23→        summarize, sort, limit, select, transform steps. No server round-trip.
+    24→     7. Results render as a paginated HTML table + an auto-picked ECharts
+    25→        chart (bar / line / grouped bar). Download buttons (CSV / Excel / PDF /
+    26→        JSON). Email composer opens a mailto: link (direct-send is a disabled
+    27→        "coming soon" toggle).
+    28→     8. Pipelines persist in localStorage — save / load / delete / import /
+    29→        export-as-JSON.
+    30→
+    31→   Anti-footguns
+    32→   -------------
+    33→     • Files > 5 MB rejected with a friendly message.
+    34→     • Groq calls rate-limited client-side to MAX_GROQ_CALLS (10) per browser
+    35→       session (session-tracked via sessionStorage so it resets on tab close).
+    36→     • The "transform" step's expression evaluator is a hand-written
+    37→       recursive-descent parser — NEVER eval() or Function().
+    38→     • No alert/confirm/prompt — modals / inline inputs only.
+    39→     • All user-provided + AI-provided text is HTML-escaped before insertion.
+    40→   ════════════════════════════════════════════════════════════════════════════ */
+    41→
+    42→(function () {
+    43→  'use strict';
+    44→
+    45→  // ─── Constants ────────────────────────────────────────────────────────────
+    46→
+    47→  var MOUNT_ID         = 'pipeline-builder-mount';
+    48→  var GROQ_PROXY       = 'https://startling-belekoy-b0ec70.netlify.app/groq-proxy';
+    49→  var GROQ_MODEL       = 'qwen/qwen3.8-27b';
+    50→  var STORAGE_KEY      = 'pipelineBuilder.saved';
+    51→  var RATE_KEY         = 'pipelineBuilder.rate';
+    52→  var SESSION_KEY      = 'pipelineBuilder.sessionId';
+    53→  var MAX_GROQ_CALLS   = 10;
+    54→  var MAX_FILE_SIZE    = 5 * 1024 * 1024;   // 5 MB demo cap
+    55→  var GROQ_TIMEOUT_MS  = 25000;             // Groq can be slow on cold starts
+    56→
+    57→  // CDN libraries — loaded lazily and cached in libCache so each loads at most
+    58→  // once per page lifetime. Loading is triggered only when the user actually
+    59→  // needs them (first file upload / first download).
+    60→  var LIB_URLS = {
+    61→    xlsx:        'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+    62→    mammoth:     'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js',
+    63→    pdfjs:       'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
+    64→    pdfjsWorker: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
+    65→    echarts:     'https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js',
+    66→    jspdf:       'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js'
+    67→  };
+    68→
+    69→  // Promise cache for each library. Once a lib loads, subsequent loadScript
+    70→  // calls for the same lib return the cached promise (no second <script> tag).
+    71→  var libCache = {};
+    72→
+    73→  // ─── Module-scope state ────────────────────────────────────────────────────
+    74→  // Single source of truth. render() re-paints the whole mount from this; each
+    75→  // sub-renderer no-ops when its slice of state is absent.
+    76→  var state = {
+    77→    document:         null,   // unified doc object after parse
+    78→    analysis:         null,   // Groq auto-analysis result
+    79→    analysisLoading:  false,
+    80→    analysisError:    null,
+    81→    instruction:      '',     // textarea value (kept out of re-render flow so typing doesn't lose focus)
+    82→    pipeline:         null,   // generated spec
+    83→    pipelineLoading: false,
+    84→    pipelineError:    null,
+    85→    showSpecJson:     false,  // collapsible raw-JSON view toggle
+    86→    result:           null,   // { rows, columns } after execution
+    87→    resultError:      null,
+    88→    savedPipelines:   [],     // array of { id, name, spec, docSummary, savedAt }
+    89→    chart:            null,   // ECharts instance
+    90→    visibleRows:      25      // pagination cursor in the results table
+    91→  };
+    92→
+    93→  // ─── Small DOM helpers ─────────────────────────────────────────────────────
+    94→
+    95→  function $(id) { return document.getElementById(id); }
+    96→  function esc(s) {
+    97→    // HTML-escape any value before inserting into innerHTML. Used for every
+    98→    // user-provided or AI-provided string. Non-strings get String()'d.
+    99→    if (s === null || s === undefined) return '';
+   100→    return String(s)
+   101→      .replace(/&/g, '&amp;')
+   102→      .replace(/</g, '&lt;')
+   103→      .replace(/>/g, '&gt;')
+   104→      .replace(/"/g, '&quot;')
+   105→      .replace(/'/g, '&#39;');
+   106→  }
+   107→  function fmtNumber(n) {
+   108→    // Right-aligned table cells. Integers get thousands separators; floats
+   109→    // get 2 decimals + thousands separators. Non-numbers pass through.
+   110→    if (n === null || n === undefined || n === '') return '';
+   111→    var num = Number(n);
+   112→    if (isNaN(num)) return String(n);
+   113→    var isInt = Math.abs(num - Math.round(num)) < 1e-9 && String(n).indexOf('.') < 0;
+   114→    return num.toLocaleString('en-US', {
+   115→      minimumFractionDigits: isInt ? 0 : 2,
+   116→      maximumFractionDigits: 2
+   117→    });
+   118→  }
+   119→  function fmtBytes(b) {
+   120→    if (b < 1024) return b + ' B';
+   121→    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+   122→    return (b / (1024 * 1024)).toFixed(2) + ' MB';
+   123→  }
+   124→  function fmtDate(ts) {
+   125→    try { return new Date(ts).toLocaleDateString('en-CA'); } catch (e) { return ''; }
+   126→  }
+   127→
+   128→  // ─── Lazy CDN script loader ────────────────────────────────────────────────
+   129→  // Injects a <script src> tag and resolves when it loads. Caches by lib key
+   130→  // so a second request returns the same promise (no duplicate tags). Errors
+   131→  // reject so callers can show a friendly "library failed to load" message.
+   132→  function loadScript(libKey) {
+   133→    if (libCache[libKey]) return libCache[libKey];
+   134→    var url = LIB_URLS[libKey];
+   135→    if (!url) return Promise.reject(new Error('Unknown library: ' + libKey));
+   136→    var p = new Promise(function (resolve, reject) {
+   137→      var s = document.createElement('script');
+   138→      s.src = url;
+   139→      s.async = true;
+   140→      s.onload = function () { resolve(); };
+   141→      s.onerror = function () { reject(new Error('Failed to load ' + libKey + ' from ' + url)); };
+   142→      // pdf.js worker is configured separately after the lib loads (see parsePDF).
+   143→      document.head.appendChild(s);
+   144→    });
+   145→    libCache[libKey] = p;
+   146→    return p;
+   147→  }
+   148→
+   149→  // Convenience: load multiple libs in parallel.
+   150→  function loadScripts(libKeys) {
+   151→    return Promise.all(libKeys.map(function (k) { return loadScript(k); }));
+   152→  }
+   153→
+   154→  // ─── Groq call rate limiter ────────────────────────────────────────────────
+   155→  // Tracks call count per browser session (sessionStorage resets on tab close).
+   156→  // localStorage holds { sessionId, count } — if sessionId differs from the
+   157→  // current sessionStorage value, the counter resets to 0 for the new session.
+   158→  function getSessionId() {
+   159→    var sid = sessionStorage.getItem(SESSION_KEY);
+   160→    if (!sid) {
+   161→      sid = 'sess-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+   162→      sessionStorage.setItem(SESSION_KEY, sid);
+   163→    }
+   164→    return sid;
+   165→  }
+   166→  function getRateState() {
+   167→    try {
+   168→      var raw = localStorage.getItem(RATE_KEY);
+   169→      var s = raw ? JSON.parse(raw) : null;
+   170→      if (!s || s.sessionId !== getSessionId()) return { sessionId: getSessionId(), count: 0 };
+   171→      return s;
+   172→    } catch (e) { return { sessionId: getSessionId(), count: 0 }; }
+   173→  }
+   174→  function canCallGroq() { return getRateState().count < MAX_GROQ_CALLS; }
+   175→  function remainingGroqCalls() { return Math.max(0, MAX_GROQ_CALLS - getRateState().count); }
+   176→  function bumpGroqCount() {
+   177→    var s = getRateState();
+   178→    s.count = (s.count || 0) + 1;
+   179→    try { localStorage.setItem(RATE_KEY, JSON.stringify(s)); } catch (e) {}
+   180→  }
+   181→
+   182→  // ─── Groq API helper ───────────────────────────────────────────────────────
+   183→  // POSTs { model, messages, temperature, max_tokens, stream:false } to the
+   184→  // Netlify proxy. Resolves to the assistant message content string. Throws
+   185→  // friendly errors on network failure / non-JSON / rate-limit.
+   186→  function callGroq(messages, opts) {
+   187→    opts = opts || {};
+   188→    if (!canCallGroq()) {
+   189→      return Promise.reject(new Error('Demo rate limit reached — ' + MAX_GROQ_CALLS +
+   190→        ' AI calls this session. Refresh the page to try again.'));
+   191→    }
+   192→    var body = {
+   193→      model: GROQ_MODEL,
+   194→      messages: messages,
+   195→      temperature: opts.temperature != null ? opts.temperature : 0.3,
+   196→      max_tokens: opts.max_tokens != null ? opts.max_tokens : 800,
+   197→      stream: false
+   198→    };
+   199→    var ctrl = new AbortController();
+   200→    var timer = setTimeout(function () { ctrl.abort(); }, GROQ_TIMEOUT_MS);
+   201→    return fetch(GROQ_PROXY, {
+   202→      method: 'POST',
+   203→      headers: { 'Content-Type': 'application/json' },
+   204→      body: JSON.stringify(body),
+   205→      signal: ctrl.signal
+   206→    })
+   207→      .then(function (r) {
+   208→        clearTimeout(timer);
+   209→        if (!r.ok) {
+   210→          throw new Error('AI service returned ' + r.status + '. Please try again.');
+   211→        }
+   212→        return r.json();
+   213→      })
+   214→      .then(function (data) {
+   215→        bumpGroqCount();
+   216→        if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
+   217→          throw new Error('AI returned an unexpected response. Try rephrasing your instruction.');
+   218→        }
+   219→        return data.choices[0].message.content || '';
+   220→      })
+   221→      .catch(function (e) {
+   222→        clearTimeout(timer);
+   223→        if (e.name === 'AbortError') {
+   224→          throw new Error('The AI service took too long to respond. Please try again.');
+   225→        }
+   226→        if (e.message && e.message.indexOf('AI service') === 0) throw e;
+   227→        if (e.message && e.message.indexOf('Demo rate limit') === 0) throw e;
+   228→        // Network / DNS / CORS error. Browsers report CORS failures as
+   229→        // generic TypeError("Failed to fetch") — the only signal we get.
+   230→        // Surface a hint that's actionable: this is most likely a stale
+   231→        // deployed Netlify edge function whose CORS list doesn't include
+   232→        // the current origin, not a network outage or a rate limit.
+   233→        if (e.name === 'TypeError' || (e.message && e.message.indexOf('Failed to fetch') >= 0)) {
+   234→          throw new Error('Couldn\u2019t reach the AI service (CORS or network error). ' +
+   235→            'The Groq proxy may be cold-starting — please try again in a few seconds. ' +
+   236→            'If the problem persists, please let us know via the Contact form.');
+   237→        }
+   238→        // Other unexpected errors
+   239→        throw new Error('Couldn\u2019t reach the AI service. Please try again — if the problem persists, the demo may be rate-limited.');
+   240→      });
+   241→  }
+   242→
+   243→  // ─── JSON extraction from Groq output ──────────────────────────────────────
+   244→  // Groq often wraps JSON in ```json ... ``` fences despite the prompt asking
+   245→  // for raw JSON. Strip fences + any leading/trailing prose, then JSON.parse.
+   246→  function extractJson(content) {
+   247→    if (!content) throw new Error('AI returned an empty response. Try rephrasing your instruction.');
+   248→    var s = String(content).trim();
+   249→    // Strip markdown code fences if present.
+   250→    var fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+   251→    if (fence) s = fence[1].trim();
+   252→    // If there's still prose before/after the JSON object, try to isolate the
+   253→    // first { ... } block.
+   254→    if (s.charAt(0) !== '{' && s.charAt(0) !== '[') {
+   255→      var start = s.indexOf('{');
+   256→      if (start < 0) start = s.indexOf('[');
+   257→      if (start >= 0) s = s.slice(start);
+   258→    }
+   259→    var endBrace = s.lastIndexOf('}');
+   260→    var endBracket = s.lastIndexOf(']');
+   261→    var end = Math.max(endBrace, endBracket);
+   262→    if (end > 0 && end < s.length - 1) s = s.slice(0, end + 1);
+   263→    try {
+   264→      return JSON.parse(s);
+   265→    } catch (e) {
+   266→      throw new Error('The AI returned an unexpected response. Try rephrasing your instruction.');
+   267→    }
+   268→  }
+   269→
+   270→  // ─── Sample template generators ────────────────────────────────────────────
+   271→  // Three embedded sample datasets — generated at runtime so we don't hand-write
+   272→  // 50-60 rows of fixture data. Each returns an array of plain row objects.
+   273→
+   274→  function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+   275→  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+   276→
+   277→  var FIRST_NAMES = ['Aisha','Marcus','Priya','Ethan','Sofia','Liam','Mei','Noah','Zara','Owen',
+   278→    'Fatima','Caleb','Ingrid','Yusuf','Hana','Diego','Anya','Tomas','Lena','Ravi',
+   279→    'Greta','Sami','Nia','Bjorn','Vera','Arjun','Lucia','Khalid','Mira','Jonas'];
+   280→  var LAST_NAMES  = ['Patel','Chen','Williams','Müller','Okafor','Garcia','Singh','Nguyen','Schmidt','Rossi',
+   281→    'Kim','Andersen','Khan','Dubois','Silva','Hassan','Novak','Costa','Reyes','Ito',
+   282→    'Larsen','Mehta','Sato','Petrov','Mansour','Olsen','Ferreira','Tan','Yamamoto','Bauer'];
+   283→  function synthName() { return pick(FIRST_NAMES) + ' ' + pick(LAST_NAMES); }
+   284→  function synthCompany() {
+   285→    var p1 = ['Blue','Summit','Apex','Vertex','North','Pioneer','Cobalt','Meridian','Quill','Iron','Stellar','Granite'];
+   286→    var p2 = ['Logistics','Systems','Capital','Materials','Dynamics','Foods','Health','Energy','Robotics','Media','Furniture','Chemicals'];
+   287→    return pick(p1) + ' ' + pick(p2) + ' ' + pick(['Inc.','Ltd.','Co.','LLC','Corp.']);
+   288→  }
+   289→
+   290→  // Template 1 — Regional Sales Q3 2026 (50 rows).
+   291→  // Realistic-ish: Ontario & Quebec overperform; Widget D & E spike in late summer.
+   292→  function genRegionalSales() {
+   293→    var rows = [];
+   294→    var regions = ['Ontario','Quebec','BC','Alberta','Nova Scotia'];
+   295→    var products = [
+   296→      { name: 'Widget A', price: 25 },
+   297→      { name: 'Widget B', price: 45 },
+   298→      { name: 'Widget C', price: 12 },
+   299→      { name: 'Widget D', price: 85 },
+   300→      { name: 'Widget E', price: 120 }
+   301→    ];
+   302→    var channels = ['Online','Retail','Partner'];
+   303→    for (var i = 0; i < 50; i++) {
+   304→      var dt = new Date(2026, 6 + randInt(0, 2), randInt(1, 28));   // Jul-Sep 2026
+   305→      var region = pick(regions);
+   306→      var prod = pick(products);
+   307→      // Ontario & Quebec skew higher qty; Widget D & E spike in Aug/Sep.
+   308→      var qty = randInt(10, 200);
+   309→      if (region === 'Ontario' || region === 'Quebec') qty = Math.round(qty * 1.35);
+   310→      if ((prod.name === 'Widget D' || prod.name === 'Widget E') && (dt.getMonth() >= 7)) {
+   311→        qty = Math.round(qty * 1.4);
+   312→      }
+   313→      rows.push({
+   314→        date: dt.toISOString().slice(0, 10),
+   315→        region: region,
+   316→        product: prod.name,
+   317→        qty: qty,
+   318→        revenue: qty * prod.price,
+   319→        channel: pick(channels)
+   320→      });
+   321→    }
+   322→    return rows;
+   323→  }
+   324→
+   325→  // Template 2 — HR Headcount Snapshot (30 rows). 80% Active.
+   326→  function genHRHeadcount() {
+   327→    var rows = [];
+   328→    var depts = ['Engineering','Sales','Operations','Finance','HR'];
+   329→    var rolesByDept = {
+   330→      Engineering: ['Software Engineer','DevOps Engineer','QA Engineer','Engineering Manager'],
+   331→      Sales:        ['Account Executive','SDR','Sales Manager','Customer Success'],
+   332→      Operations:   ['Operations Analyst','Logistics Coordinator','Ops Manager'],
+   333→      Finance:      ['Financial Analyst','Accountant','Controller'],
+   334→      HR:           ['HR Generalist','Recruiter','HR Manager']
+   335→    };
+   336→    for (var i = 0; i < 30; i++) {
+   337→      var dept = pick(depts);
+   338→      var level = pick(['Junior','Mid','Senior']);
+   339→      var role = pick(rolesByDept[dept]);
+   340→      // Salary weighted by level.
+   341→      var base = level === 'Junior' ? randInt(55000, 72000)
+   342→               : level === 'Mid'    ? randInt(75000, 98000)
+   343→               :                      randInt(105000, 145000);
+   344→      var hireYear = randInt(2018, 2026);
+   345→      var hireDate = new Date(hireYear, randInt(0, 11), randInt(1, 28));
+   346→      var r = Math.random();
+   347→      var status = r < 0.8 ? 'Active' : (r < 0.92 ? 'On-Leave' : 'Terminated');
+   348→      rows.push({
+   349→        employee_id: 'EMP-' + String(i + 1).padStart(3, '0'),
+   350→        name: synthName(),
+   351→        department: dept,
+   352→        title: level + ' ' + role,
+   353→        hire_date: hireDate.toISOString().slice(0, 10),
+   354→        salary: base,
+   355→        status: status
+   356→      });
+   357→    }
+   358→    return rows;
+   359→  }
+   360→
+   361→  // Template 3 — Invoice Aging (40 rows). days_outstanding computed from today.
+   362→  function genInvoiceAging() {
+   363→    var rows = [];
+   364→    var today = new Date();
+   365→    for (var i = 0; i < 40; i++) {
+   366→      // Issue date within the last 120 days.
+   367→      var issue = new Date(today.getTime() - randInt(1, 120) * 86400000);
+   368→      var due = new Date(issue.getTime() + 30 * 86400000);
+   369→      var days = Math.floor((today.getTime() - issue.getTime()) / 86400000);
+   370→      var bucket;
+   371→      if (days < 30) bucket = 'Current';
+   372→      else if (days < 60) bucket = '30-60';
+   373→      else if (days < 90) bucket = '60-90';
+   374→      else bucket = '90+';
+   375→      rows.push({
+   376→        invoice_id: 'INV-' + (1001 + i),
+   377→        customer: synthCompany(),
+   378→        issue_date: issue.toISOString().slice(0, 10),
+   379→        due_date: due.toISOString().slice(0, 10),
+   380→        amount: randInt(1000, 25000),
+   381→        days_outstanding: days,
+   382→        status: bucket
+   383→      });
+   384→    }
+   385→    return rows;
+   386→  }
+   387→
+   388→  // Sample-button registry — name, icon, row count, generator (or async loader
+   389→  // for PDF samples that need fetch + pdf.js parse), columns.
+   390→  var SAMPLE_TEMPLATES = [
+   391→    {
+   392→      key: 'sales', name: 'Regional Sales Q3', icon: 'fa-chart-line',
+   393→      rowCount: 50, columns: ['date','region','product','qty','revenue','channel'],
+   394→      generate: genRegionalSales
+   395→    },
+   396→    {
+   397→      key: 'hr', name: 'HR Headcount Snapshot', icon: 'fa-users',
+   398→      rowCount: 30, columns: ['employee_id','name','department','title','hire_date','salary','status'],
+   399→      generate: genHRHeadcount
+   400→    },
+   401→    {
+   402→      key: 'invoices', name: 'Invoice Aging', icon: 'fa-file-invoice-dollar',
+   403→      rowCount: 40, columns: ['invoice_id','customer','issue_date','due_date','amount','days_outstanding','status'],
+   404→      generate: genInvoiceAging
+   405→    },
+   406→    {
+   407→      // PDF sample — fetched + parsed by pdf.js at click time (no inline data).
+   408→      // The PDF lives at /data/sample-sales-report.pdf (committed to the repo)
+   409→      // and contains a 30-row Q3 2026 regional sales report laid out as a real
+   410→      // table widget so pdf.js's text extraction + the demo's detectPDFTable()
+   411→      // heuristic produce clean rows. Lets users try the full NL → pipeline →
+   412→      // execute → email flow on a PDF (not just Excel).
+   413→      key: 'pdf', name: 'Sales Report (PDF)', icon: 'fa-file-pdf',
+   414→      rowCount: 30, columns: ['Date','Region','Product','Qty','Revenue','Channel'],
+   415→      isPDF: true,
+   416→      url: '/data/sample-sales-report.pdf'
+   417→    }
+   418→  ];
+   419→
+   420→  // ─── Unified document object factory ────────────────────────────────────────
+   421→  function makeDoc(opts) {
+   422→    var columns = opts.columns || (opts.rows && opts.rows.length ? Object.keys(opts.rows[0]) : []);
+   423→    return {
+   424→      type:       opts.type,
+   425→      name:       opts.name || 'untitled',
+   426→      fileSize:   opts.fileSize || 0,
+   427→      rows:       opts.rows || [],
+   428→      columns:    columns,
+   429→      rawText:    opts.rawText || '',
+   430→      rowCount:   (opts.rows || []).length,
+   431→      columnCount: columns.length,
+   432→      warnings:   opts.warnings || []
+   433→    };
+   434→  }
+   435→
+   436→  // ─── File parsers ───────────────────────────────────────────────────────────
+   437→  // Each returns a unified doc object. All async, all try/catch — failures throw
+   438→  // a friendly error that the caller surfaces as an inline error card.
+   439→
+   440→  // CSV — native parse, no library. Handles quoted fields with embedded commas,
+   441→  // newlines, and doubled-quote escapes (RFC 4180).
+   442→  function parseCSV(file) {
+   443→    return new Promise(function (resolve, reject) {
+   444→      var reader = new FileReader();
+   445→      reader.onerror = function () { reject(new Error('Couldn\u2019t read this file.')); };
+   446→      reader.onload = function () {
+   447→        try {
+   448→          var text = reader.result;
+   449→          var rows = csvToRows(text);
+   450→          if (!rows.length) {
+   451→            reject(new Error('Couldn\u2019t parse this CSV — the file appears to be empty.'));
+   452→            return;
+   453→          }
+   454→          resolve(makeDoc({
+   455→            type: 'csv', name: file.name, fileSize: file.size,
+   456→            rows: rows.rows, columns: rows.columns, rawText: ''
+   457→          }));
+   458→        } catch (e) {
+   459→          reject(new Error('Couldn\u2019t parse this CSV. Make sure it\u2019s a valid .csv and try again.'));
+   460→        }
+   461→      };
+   462→      reader.readAsText(file);
+   463→    });
+   464→  }
+   465→  // Minimal RFC-4180 CSV parser → { rows: [{...}], columns: [...] }
+   466→  function csvToRows(text) {
+   467→    var records = [];
+   468→    var field = '';
+   469→    var row = [];
+   470→    var i = 0;
+   471→    var inQuotes = false;
+   472→    while (i < text.length) {
+   473→      var c = text[i];
+   474→      if (inQuotes) {
+   475→        if (c === '"') {
+   476→          if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+   477→          inQuotes = false; i++; continue;
+   478→        }
+   479→        field += c; i++; continue;
+   480→      }
+   481→      if (c === '"') { inQuotes = true; i++; continue; }
+   482→      if (c === ',') { row.push(field); field = ''; i++; continue; }
+   483→      if (c === '\r') { i++; continue; }
+   484→      if (c === '\n') { row.push(field); records.push(row); row = []; field = ''; i++; continue; }
+   485→      field += c; i++;
+   486→    }
+   487→    if (field.length || row.length) { row.push(field); records.push(row); }
+   488→    if (!records.length) return { rows: [], columns: [] };
+   489→    var headers = records[0].map(function (h, idx) { return h || ('col_' + (idx + 1)); });
+   490→    var objRows = records.slice(1).filter(function (r) {
+   491→      return r.some(function (v) { return v !== '' && v != null; });
+   492→    }).map(function (r) {
+   493→      var o = {};
+   494→      headers.forEach(function (h, idx) {
+   495→        var v = r[idx];
+   496→        // Auto-coerce numeric strings — keeps summarize/sort working.
+   497→        if (v != null && v !== '' && !isNaN(v) && /^-?\d+(\.\d+)?$/.test(v.trim())) o[h] = Number(v);
+   498→        else o[h] = v != null ? v : '';
+   499→      });
+   500→      return o;
+   501→    });
+   502→    return { rows: objRows, columns: headers };
+   503→  }
+   504→
+   505→  // Excel (.xlsx/.xls) via SheetJS. Loaded lazily on first parse.
+   506→  function parseExcel(file) {
+   507→    return loadScript('xlsx').then(function () {
+   508→      return new Promise(function (resolve, reject) {
+   509→        var reader = new FileReader();
+   510→        reader.onerror = function () { reject(new Error('Couldn\u2019t read this Excel file.')); };
+   511→        reader.onload = function () {
+   512→          try {
+   513→            var wb = XLSX.read(reader.result, { type: 'array' });
+   514→            var warnings = [];
+   515→            if (wb.SheetNames.length > 1) {
+   516→              warnings.push('Detected ' + wb.SheetNames.length + ' sheets — using the first ("' + wb.SheetNames[0] + '").');
+   517→            }
+   518→            var sheet = wb.Sheets[wb.SheetNames[0]];
+   519→            var aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
+   520→            if (!aoa.length) {
+   521→              reject(new Error('This Excel file has no rows in its first sheet.'));
+   522→              return;
+   523→            }
+   524→            var headers = aoa[0].map(function (h, idx) { return h != null && h !== '' ? String(h) : 'col_' + (idx + 1); });
+   525→            var rows = aoa.slice(1).filter(function (r) {
+   526→              return r.some(function (v) { return v !== '' && v != null; });
+   527→            }).map(function (r) {
+   528→              var o = {};
+   529→              headers.forEach(function (h, idx) { o[h] = r[idx] != null ? r[idx] : ''; });
+   530→              return o;
+   531→            });
+   532→            resolve(makeDoc({
+   533→              type: 'excel', name: file.name, fileSize: file.size,
+   534→              rows: rows, columns: headers, warnings: warnings
+   535→            }));
+   536→          } catch (e) {
+   537→            reject(new Error('Couldn\u2019t parse this Excel file. Make sure it\u2019s a valid .xlsx/.xls and try again.'));
+   538→          }
+   539→        };
+   540→        reader.readAsArrayBuffer(file);
+   541→      });
+   542→    });
+   543→  }
+   544→
+   545→  // Word (.docx) via mammoth. Extract raw text + try to parse the first HTML
+   546→  // <table> for tabular data. If no table found, treat as text-only doc.
+   547→  function parseWord(file) {
+   548→    return loadScript('mammoth').then(function () {
+   549→      return new Promise(function (resolve, reject) {
+   550→        var reader = new FileReader();
+   551→        reader.onerror = function () { reject(new Error('Couldn\u2019t read this Word file.')); };
+   552→        reader.onload = function () {
+   553→          var ab = reader.result;
+   554→          // extractRawText + convertToHtml in parallel.
+   555→          Promise.all([
+   556→            mammoth.extractRawText({ arrayBuffer: ab }).promise ||
+   557→              mammoth.extractRawText({ arrayBuffer: ab }),
+   558→            mammoth.convertToHtml({ arrayBuffer: ab }).promise ||
+   559→              mammoth.convertToHtml({ arrayBuffer: ab })
+   560→          ]).then(function (results) {
+   561→            var rawText = (results[0] && results[0].value) || '';
+   562→            var html    = (results[1] && results[1].value) || '';
+   563→            var warnings = [];
+   564→            var parsed = parseFirstHtmlTable(html);
+   565→            if (parsed.rows.length) {
+   566→              if (rawText) warnings.push('Document contains a table — using its rows as the dataset. Other text ignored for pipeline operations.');
+   567→              resolve(makeDoc({
+   568→                type: 'word', name: file.name, fileSize: file.size,
+   569→                rows: parsed.rows, columns: parsed.columns, rawText: rawText, warnings: warnings
+   570→              }));
+   571→            } else {
+   572→              warnings.push('No tables detected — this document is text-only. Pipeline steps that need rows (filter/summarize/sort) will return empty results, but the AI can still analyze the text.');
+   573→              resolve(makeDoc({
+   574→                type: 'word', name: file.name, fileSize: file.size,
+   575→                rows: [], columns: [], rawText: rawText, warnings: warnings
+   576→              }));
+   577→            }
+   578→          }).catch(function () {
+   579→            reject(new Error('Couldn\u2019t parse this Word file. Make sure it\u2019s a valid .docx (legacy .doc is not supported) and try again.'));
+   580→          });
+   581→        };
+   582→        reader.readAsArrayBuffer(file);
+   583→      });
+   584→    });
+   585→  }
+   586→  // Parse the first <table> in an HTML string into { rows, columns }.
+   587→  function parseFirstHtmlTable(html) {
+   588→    if (!html) return { rows: [], columns: [] };
+   589→    var tmp = document.createElement('div');
+   590→    tmp.innerHTML = html;
+   591→    var table = tmp.querySelector('table');
+   592→    if (!table) return { rows: [], columns: [] };
+   593→    var trs = table.querySelectorAll('tr');
+   594→    if (!trs.length) return { rows: [], columns: [] };
+   595→    var headers = [];
+   596→    var firstCells = trs[0].querySelectorAll('th,td');
+   597→    firstCells.forEach(function (c, idx) { headers.push((c.textContent || '').trim() || 'col_' + (idx + 1)); });
+   598→    // If first row has <th>, treat it as header; otherwise the first row is data.
+   599→    var startIdx = trs[0].querySelector('th') ? 1 : 0;
+   600→    var rows = [];
+   601→    for (var i = startIdx; i < trs.length; i++) {
+   602→      var cells = trs[i].querySelectorAll('td,th');
+   603→      if (!cells.length) continue;
+   604→      var o = {};
+   605→      headers.forEach(function (h, idx) {
+   606→        var v = (cells[idx] ? cells[idx].textContent : '').trim();
+   607→        if (v !== '' && !isNaN(v) && /^-?\d+(\.\d+)?$/.test(v)) o[h] = Number(v);
+   608→        else o[h] = v;
+   609→      });
+   610→      rows.push(o);
+   611→    }
+   612→    return { rows: rows, columns: headers };
+   613→  }
+   614→
+   615→  // PDF (.pdf) via pdf.js. Extracts text per page. Attempts a simple table
+   616→  // detection: if multiple text items share the same Y coordinate across pages,
+   617→  // group them into rows. If detection fails, fall back to text-only.
+   618→  function parsePDF(file) {
+   619→    return loadScript('pdfjs').then(function () {
+   620→      return new Promise(function (resolve, reject) {
+   621→        var reader = new FileReader();
+   622→        reader.onerror = function () { reject(new Error('Couldn\u2019t read this PDF.')); };
+   623→        reader.onload = function () {
+   624→          try {
+   625→            // Configure the worker — pdf.js won't run without it.
+   626→            if (window.pdfjsLib) {
+   627→              pdfjsLib.GlobalWorkerOptions.workerSrc = LIB_URLS.pdfjsWorker;
+   628→            }
+   629→            var loadingTask = pdfjsLib.getDocument({ data: reader.result });
+   630→            loadingTask.promise.then(function (pdf) {
+   631→              var numPages = pdf.numPages;
+   632→              var allItems = [];   // { page, str, x, y, w }
+   633→              var rawText  = [];
+   634→              // Sequentially fetch each page's text content. We do this serially
+   635→              // (rather than Promise.all) because pdf.js's getTextContent can
+   636→              // interfere with concurrent page operations on some builds, and
+   637→              // serial is plenty fast for the demo's <5MB PDFs.
+   638→              function readPagesSequentially(pageNum) {
+   639→                if (pageNum > numPages) return Promise.resolve();
+   640→                return pdf.getPage(pageNum).then(function (page) {
+   641→                  return page.getTextContent().then(function (tc) {
+   642→                    (tc.items || []).forEach(function (it) {
+   643→                      allItems.push({
+   644→                        page: pageNum,
+   645→                        str: it.str,
+   646→                        x: it.transform ? it.transform[4] : 0,
+   647→                        y: it.transform ? it.transform[5] : 0,
+   648→                        w: it.width || 0
+   649→                      });
+   650→                      if (it.str) rawText.push(it.str);
+   651→                    });
+   652→                    return readPagesSequentially(pageNum + 1);
+   653→                  });
+   654→                });
+   655→              }
+   656→              return readPagesSequentially(1).then(function () {
+   657→                var text = rawText.join(' ').replace(/\s+/g, ' ').trim();
+   658→                var parsed = detectPDFTable(allItems);
+   659→                var warnings = [];
+   660→                if (parsed.rows.length) {
+   661→                  warnings.push('Detected a tabular layout from text positioning — rows may be imperfect. Verify against the source PDF.');
+   662→                } else if (text) {
+   663→                  warnings.push('No clear table layout detected — treating as a text document. Pipeline steps that need rows will return empty results, but the AI can still analyze the text.');
+   664→                }
+   665→                resolve(makeDoc({
+   666→                  type: 'pdf', name: file.name, fileSize: file.size,
+   667→                  rows: parsed.rows, columns: parsed.columns,
+   668→                  rawText: text || '(no extractable text)', warnings: warnings
+   669→                }));
+   670→              });
+   671→            }).catch(function () {
+   672→              reject(new Error('Couldn\u2019t open this PDF. The file may be corrupted, password-protected, or a scanned image (text-extractable PDFs only).'));
+   673→            });
+   674→          } catch (e) {
+   675→            reject(new Error('Couldn\u2019t parse this PDF. Make sure it\u2019s a valid .pdf and try again.'));
+   676→          }
+   677→        };
+   678→        reader.readAsArrayBuffer(file);
+   679→      });
+   680→    });
+   681→  }
+   682→
+   683→  // Heuristic PDF table detector: group items by Y coordinate (rounded to
+   684→  // nearest 2px to absorb sub-pixel jitter), sort each row's items by X, and
+   685→  // join into cells. If at least 3 rows × 2 cols, treat as a table.
+   686→  function detectPDFTable(items) {
+   687→    if (!items || items.length < 6) return { rows: [], columns: [] };
+   688→    // Group by rounded Y.
+   689→    var byY = {};
+   690→    items.forEach(function (it) {
+   691→      if (!it.str) return;
+   692→      var y = Math.round(it.y / 2) * 2;
+   693→      if (!byY[y]) byY[y] = [];
+   694→      byY[y].push(it);
+   695→    });
+   696→    var yKeys = Object.keys(byY).map(Number).sort(function (a, b) { return b - a; }); // top of page = larger Y
+   697→    if (yKeys.length < 3) return { rows: [], columns: [] };
+   698→    // Build row arrays (items sorted by X within each row).
+   699→    var rowArrays = yKeys.map(function (y) {
+   700→      return byY[y].sort(function (a, b) { return a.x - b.x; })
+   701→        .map(function (it) { return it.str; })
+   702→        .join(' ').trim();
+   703→    }).filter(function (s) { return s.length; });
+   704→    if (rowArrays.length < 3) return { rows: [], columns: [] };
+   705→    // Split each row on 2+ space gaps into columns. If the first row splits into
+   706→    // ≥2 columns, use that count as the column count.
+   707→    var splitRows = rowArrays.map(function (r) {
+   708→      return r.split(/\s{2,}/).map(function (s) { return s.trim(); }).filter(function (s) { return s.length; });
+   709→    });
+   710→    var colCount = splitRows[0].length;
+   711→    if (colCount < 2) return { rows: [], columns: [] };
+   712→    // Require that most rows have ≥2 columns; otherwise it's just paragraph text.
+   713→    var multiColRows = splitRows.filter(function (r) { return r.length >= 2; }).length;
+   714→    if (multiColRows < splitRows.length * 0.6) return { rows: [], columns: [] };
+   715→    var headers = splitRows[0].map(function (h, idx) { return h || 'col_' + (idx + 1); });
+   716→    var rows = splitRows.slice(1).filter(function (r) { return r.length; }).map(function (r) {
+   717→      var o = {};
+   718→      headers.forEach(function (h, idx) {
+   719→        var v = r[idx] != null ? r[idx] : '';
+   720→        if (v !== '' && !isNaN(v) && /^-?\d+(\.\d+)?$/.test(v.replace(/[,$]/g, ''))) {
+   721→          o[h] = Number(v.replace(/[,$]/g, ''));
+   722→        } else {
+   723→          o[h] = v;
+   724→        }
+   725→      });
+   726→      return o;
+   727→    });
+   728→    return { rows: rows, columns: headers };
+   729→  }
+   730→
+   731→  // Dispatcher: route a File to the right parser by extension + MIME.
+   732→  function parseFile(file) {
+   733→    var name = (file.name || '').toLowerCase();
+   734→    if (file.size > MAX_FILE_SIZE) {
+   735→      return Promise.reject(new Error('For demo performance, please use files under 5 MB.'));
+   736→    }
+   737→    if (/\.csv$/.test(name) || file.type === 'text/csv') return parseCSV(file);
+   738→    if (/\.xlsx$|\.xls$|\.xlsm$/.test(name))           return parseExcel(file);
+   739→    if (/\.docx$/.test(name))                           return parseWord(file);
+   740→    if (/\.pdf$/.test(name) || file.type === 'application/pdf') return parsePDF(file);
+   741→    return Promise.reject(new Error('Unsupported file type. Accepted: .xlsx, .xls, .docx, .pdf, .csv'));
+   742→  }
+   743→
+   744→  // Load a sample template. For Excel-style samples this is synchronous
+   745→  // (returns a doc object directly). For PDF samples it's async — fetches
+   746→  // the PDF file and parses it via pdf.js (which is loaded lazily on first
+   747→  // use). Returns a Promise<doc> in either case for unified handling.
+   748→  function loadSample(tpl) {
+   749→    if (tpl.isPDF) {
+   750→      // Async path: fetch the PDF, wrap it as a File, hand off to parsePDF.
+   751→      // Same parser path as a user-uploaded PDF, so detectPDFTable() runs
+   752→      // against the real text positioning extracted by pdf.js.
+   753→      return fetch(tpl.url, { cache: 'no-cache' }).then(function (r) {
+   754→        if (!r.ok) throw new Error('Couldn\u2019t load the sample PDF (' + r.status + '). The file may not be deployed yet.');
+   755→        return r.arrayBuffer();
+   756→      }).then(function (buf) {
+   757→        // Wrap as a File so parsePDF's FileReader.readAsArrayBuffer works.
+   758→        var filename = tpl.url.split('/').pop();
+   759→        var file = new File([buf], filename, { type: 'application/pdf' });
+   760→        return parsePDF(file);
+   761→      }).then(function (doc) {
+   762→        // Tag the doc as a sample so the UI can show "sample dataset" hint
+   763→        // and so the analysis step knows it's a synthetic demo PDF.
+   764→        doc.name = tpl.name + ' (sample)';
+   765→        if (!doc.warnings) doc.warnings = [];
+   766→        doc.warnings.unshift('This is a committed sample PDF — no file was uploaded.');
+   767→        return doc;
+   768→      });
+   769→    }
+   770→    // Sync path: existing Excel-style generator
+   771→    var rows = tpl.generate();
+   772→    return Promise.resolve(makeDoc({
+   773→      type: 'excel', name: tpl.name + ' (sample)', fileSize: 0,
+   774→      rows: rows, columns: tpl.columns.slice(),
+   775→      warnings: ['This is a generated sample dataset — no file was uploaded.']
+   776→    }));
+   777→  }
+   778→
+   779→  // ─── Groq auto-analysis ────────────────────────────────────────────────────
+   780→  // Sends a sample of the document to Groq and parses the JSON analysis. Result
+   781→  // shape: { documentType, summary, keyColumns, suggestedActions, detectedFormulas, dataQualityNotes }
+   782→  function analyzeDocument(doc) {
+   783→    var sample = doc.rows && doc.rows.length
+   784→      ? JSON.stringify(doc.rows.slice(0, 5), null, 2)
+   785→      : JSON.stringify((doc.rawText || '').slice(0, 800));
+   786→    var prompt =
+   787→      'You are analyzing a ' + doc.type + ' document titled "' + doc.name + '" with ' +
+   788→      doc.rowCount + ' rows \u00d7 ' + doc.columnCount + ' columns.\n' +
+   789→      'Column headers: ' + (doc.columns.join(', ') || '(none — text document)') + '\n' +
+   790→      'First 5 rows (sample):\n' + sample + '\n\n' +
+   791→      'Analyze this document and respond with a JSON object ONLY (no markdown, no explanation):\n' +
+   792→      '{\n' +
+   793→      '  "documentType": "what kind of data this is (e.g. \'regional sales\', \'invoice aging\', \'HR roster\')",\n' +
+   794→      '  "summary": "one-sentence description of what\'s in the data",\n' +
+   795→      '  "keyColumns": ["which columns look most important for analysis"],\n' +
+   796→      '  "suggestedActions": [\n' +
+   797→      '    "4-6 natural-language suggested actions, each a one-sentence instruction",\n' +
+   798→      '    "Include a MIX of: tabular tasks (e.g. \'Summarize total revenue by region\', \'Top 5 products by qty\', \'Filter to Ontario and sort by revenue desc\') AND text tasks (e.g. \'Summarize this document in plain English\', \'What are the main points?\', \'Ask a question about this report\')",\n' +
+   799→      '    "For text-heavy documents (PDF/Word with little tabular data), lean toward text tasks",\n' +
+   800→      '    "For row-based documents (Excel/CSV with many rows), lean toward tabular tasks but include at least one text task",\n' +
+   801→      '    "Make them specific to this data, not generic"\n' +
+   802→      '  ],\n' +
+   803→      '  "detectedFormulas": ["any formulas or derived columns you notice (e.g. \'revenue = qty \u00d7 price\')"],\n' +
+   804→      '  "dataQualityNotes": ["any issues — missing values, outliers, etc."]\n' +
+   805→      '}';
+   806→    return callGroq(
+   807→      [{ role: 'system', content: 'You are a data analyst that outputs only raw JSON.' },
+   808→       { role: 'user', content: prompt }],
+   809→      { temperature: 0.3, max_tokens: 800 }
+   810→    ).then(function (content) { return extractJson(content); });
+   811→  }
+   812→
+   813→  // ─── Groq pipeline-spec generator (NL → JSON) ──────────────────────────────
+   814→  function generatePipelineSpec(doc, instruction) {
+   815→    var sampleRow = doc.rows && doc.rows.length ? JSON.stringify(doc.rows[0]) : '(no rows)';
+   816→    var prompt =
+   817→      'You are an AI pipeline constructor. Convert the user\'s natural language instruction into a JSON pipeline spec.\n\n' +
+   818→      'User\'s instruction: "' + instruction + '"\n\n' +
+   819→      'Document context:\n' +
+   820→      '- Type: ' + doc.type + '\n' +
+   821→      '- Name: ' + doc.name + '\n' +
+   822→      '- Columns: ' + (doc.columns.join(', ') || '(none)') + '\n' +
+   823→      '- Sample row: ' + sampleRow + '\n' +
+   824→      '- Row count: ' + doc.rowCount + '\n\n' +
+   825→      'Respond with a JSON object ONLY (no markdown, no explanation):\n' +
+   826→      '{\n' +
+   827→      '  "name": "short pipeline name",\n' +
+   828→      '  "description": "one-sentence description of what the pipeline does",\n' +
+   829→      '  "steps": [\n' +
+   830→      '    { "type": "filter"|"summarize"|"sort"|"limit"|"select"|"transform", "description": "what this step does",\n' +
+   831→      '      // filter:    { "column": "...", "operator": "=="|"!="|">"|"<"|">="|"<="|"contains", "value": ... }\n' +
+   832→      '      // summarize: { "groupBy": ["col1", ...], "aggregation": "sum"|"count"|"avg"|"min"|"max", "valueColumn": "..." }\n' +
+   833→      '      // sort:      { "column": "...", "order": "asc"|"desc" }\n' +
+   834→      '      // limit:     { "count": 5 }\n' +
+   835→      '      // select:    { "columns": ["col1", "col2"] }\n' +
+   836→      '      // transform: { "newColumn": "...", "expression": "qty * price" } }\n' +
+   837→      '    }\n' +
+   838→      '  ],\n' +
+   839→      '  "output": { "format": "html_table"|"csv"|"excel"|"pdf"|"html_text", "emailSubject": "subject line", "emailBodyIntro": "one-sentence intro" }\n' +
+   840→      '}\n\n' +
+   841→      'CRITICAL DISPATCH RULE:\n' +
+   842→      '  - If the instruction is a TABULAR operation (filter, summarize, aggregate, sort, count, group, top N, etc.) -> return spec with "steps[]"\n' +
+   843→      '  - If the instruction is a TEXT TASK (summarize the document, main points, key takeaways, what does this report say, ask a question, explain, describe) -> return spec with "aiTask{}" instead of "steps[]"\n' +
+   844→      '  - DO NOT include both. Pick one based on the instruction wording.\n\n' +
+   845→      'aiTask shape (only when the instruction is a text task):\n' +
+   846→      '  "aiTask": {\n' +
+   847→      '    "type": "summary" | "bullet_points" | "qa",\n' +
+   848→      '    "question": "...",          // ONLY for type="qa" — restate the user\'s question\n' +
+   849→      '    "length": "short" | "medium" | "long",   // optional, only for type="summary"\n' +
+   850→      '    "count": 5                  // optional, only for type="bullet_points" — how many points to extract\n' +
+   851→      '  }\n' +
+   852→      '  output.format for aiTask = "html_text"\n' +
+   853→      '  Leave "steps" OUT of the JSON entirely when aiTask is present.';
+   854→    return callGroq(
+   855→      [{ role: 'system', content: 'You are a pipeline spec generator that outputs only raw JSON.' },
+   856→       { role: 'user', content: prompt }],
+   857→      { temperature: 0.2, max_tokens: 1000 }
+   858→    ).then(function (content) {
+   859→      var spec = extractJson(content);
+   860→      // Accept EITHER steps[] (tabular) OR aiTask{} (text task).
+   861→      // Groq decides which path based on the instruction wording.
+   862→      var hasAiTask = spec.aiTask && typeof spec.aiTask === 'object' && typeof spec.aiTask.type === 'string';
+   863→      var hasSteps = spec.steps && Array.isArray(spec.steps) && spec.steps.length;
+   864→      if (!hasAiTask && !hasSteps) {
+   865→        throw new Error('The AI didn\u2019t produce a pipeline or an AI task. Try rephrasing your instruction.');
+   866→      }
+   867→      if (hasSteps && !hasAiTask) {
+   868→        // Tabular path — strip obviously bad step types so the executor doesn't choke.
+   869→        spec.steps = spec.steps.filter(function (s) { return s && typeof s.type === 'string'; });
+   870→        if (!spec.steps.length) {
+   871→          throw new Error('The AI returned an unexpected response. Try rephrasing your instruction.');
+   872→        }
+   873→      }
+   874→      if (!spec.output || typeof spec.output !== 'object') {
+   875→        spec.output = { format: hasAiTask ? 'html_text' : 'html_table' };
+   876→      }
+   877→      return spec;
+   878→    });
+   879→  }
+   880→
+   881→  // ─── Safe expression evaluator (recursive descent) ─────────────────────────
+   882→  // ─────────────────────────────────────────────────────────────────────────────
+   883→  // Used by the "transform" step to evaluate expressions like "qty * price" or
+   884→  // "first_name + ' ' + last_name" WITHOUT eval() or new Function() — those are
+   885→  // XSS vectors and CSP-violators. This parser supports:
+   886→  //   • numeric literals (12, 3.14)
+   887→  //   • single-quoted string literals ('hello')
+   888→  //   • column identifiers (qty, price, first_name)
+   889→  //   • operators: + - * / %  (binary, left-associative; + on a string operand
+   890→  //     coerces both sides to string and concatenates)
+   891→  //   • parentheses for grouping
+   892→  // Anything else throws — fail closed.
+   893→  //
+   894→  // Grammar (EBNF):
+   895→  //   expression := term { ('+' | '-') term }
+   896→  //   term       := factor { ('*' | '/' | '%') factor }
+   897→  //   factor     := number | string | identifier | '(' expression ')'
+   898→  // ─────────────────────────────────────────────────────────────────────────────
+   899→
+   900→  function tokenizeExpr(expr) {
+   901→    var tokens = [];
+   902→    var i = 0, len = expr.length;
+   903→    while (i < len) {
+   904→      var c = expr[i];
+   905→      if (c === ' ' || c === '\t' || c === '\n' || c === '\r') { i++; continue; }
+   906→      // Number literal — digits and at most one decimal point.
+   907→      if ((c >= '0' && c <= '9') || c === '.') {
+   908→        var num = '';
+   909→        var dotSeen = false;
+   910→        while (i < len && ((expr[i] >= '0' && expr[i] <= '9') || expr[i] === '.')) {
+   911→          if (expr[i] === '.') {
+   912→            if (dotSeen) break;
+   913→            dotSeen = true;
+   914→          }
+   915→          num += expr[i]; i++;
+   916→        }
+   917→        var n = parseFloat(num);
+   918→        if (isNaN(n)) throw new Error('Invalid number in expression: ' + num);
+   919→        tokens.push({ type: 'num', value: n });
+   920→        continue;
+   921→      }
+   922→      // Single-quoted string literal — doubled '' inside means an escaped quote.
+   923→      if (c === "'") {
+   924→        var str = '';
+   925→        i++; // skip opening quote
+   926→        while (i < len && expr[i] !== "'") { str += expr[i]; i++; }
+   927→        if (i >= len) throw new Error('Unterminated string literal in expression');
+   928→        i++; // skip closing quote
+   929→        tokens.push({ type: 'str', value: str });
+   930→        continue;
+   931→      }
+   932→      // Identifier — letters, digits, underscore (must start with letter/underscore).
+   933→      if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c === '_') {
+   934→        var id = '';
+   935→        while (i < len && ((expr[i] >= 'a' && expr[i] <= 'z') ||
+   936→                           (expr[i] >= 'A' && expr[i] <= 'Z') ||
+   937→                           (expr[i] >= '0' && expr[i] <= '9') || expr[i] === '_')) {
+   938→          id += expr[i]; i++;
+   939→        }
+   940→        tokens.push({ type: 'id', value: id });
+   941→        continue;
+   942→      }
+   943→      // Operators + parens.
+   944→      if ('+-*/%()'.indexOf(c) >= 0) { tokens.push({ type: 'op', value: c }); i++; continue; }
+   945→      throw new Error('Invalid character in expression: ' + c);
+   946→    }
+   947→    return tokens;
+   948→  }
+   949→
+   950→  // Recursive-descent parser → AST nodes:
+   951→  //   { type: 'literal', value: <number|string> }
+   952→  //   { type: 'column',  name: <string> }
+   953→  //   { type: 'binop',   op: '+'|'-'|'*'|'/'|'%', left: <node>, right: <node> }
+   954→  function parseExpr(tokens) {
+   955→    var pos = 0;
+   956→    function peek() { return tokens[pos]; }
+   957→    function next() { return tokens[pos++]; }
+   958→    function parseExpression() {
+   959→      var node = parseTerm();
+   960→      while (peek() && peek().type === 'op' && (peek().value === '+' || peek().value === '-')) {
+   961→        var op = next().value;
+   962→        var right = parseTerm();
+   963→        node = { type: 'binop', op: op, left: node, right: right };
+   964→      }
+   965→      return node;
+   966→    }
+   967→    function parseTerm() {
+   968→      var node = parseFactor();
+   969→      while (peek() && peek().type === 'op' &&
+   970→             (peek().value === '*' || peek().value === '/' || peek().value === '%')) {
+   971→        var op = next().value;
+   972→        var right = parseFactor();
+   973→        node = { type: 'binop', op: op, left: node, right: right };
+   974→      }
+   975→      return node;
+   976→    }
+   977→    function parseFactor() {
+   978→      var t = peek();
+   979→      if (!t) throw new Error('Unexpected end of expression');
+   980→      if (t.type === 'num' || t.type === 'str') { next(); return { type: 'literal', value: t.value }; }
+   981→      if (t.type === 'id') { next(); return { type: 'column', name: t.value }; }
+   982→      if (t.type === 'op' && t.value === '(') {
+   983→        next();
+   984→        var node = parseExpression();
+   985→        if (!peek() || peek().value !== ')') throw new Error('Missing closing parenthesis');
+   986→        next(); // consume ')'
+   987→        return node;
+   988→      }
+   989→      throw new Error('Unexpected token in expression: ' + t.value);
+   990→    }
+   991→    var ast = parseExpression();
+   992→    if (pos < tokens.length) throw new Error('Unexpected trailing tokens in expression');
+   993→    return ast;
+   994→  }
+   995→
+   996→  // Evaluate an AST node against a row object. The '+' operator is polymorphic:
+   997→  // if either operand is a string, both sides stringify and concatenate; else
+   998→  // numeric addition. All other operators are numeric only.
+   999→  function evalAst(node, row) {
+  1000→    if (node.type === 'literal') return node.value;
+  1001→    if (node.type === 'column') {
+  1002→      if (!(node.name in row)) throw new Error('Unknown column in expression: ' + node.name);
+  1003→      return row[node.name];
+  1004→    }
+  1005→    if (node.type === 'binop') {
+  1006→      var l = evalAst(node.left, row);
+  1007→      var r = evalAst(node.right, row);
+  1008→      if (node.op === '+' && (typeof l === 'string' || typeof r === 'string')) {
+  1009→        return String(l) + String(r);
+  1010→      }
+  1011→      var ln = Number(l), rn = Number(r);
+  1012→      if (isNaN(ln) || isNaN(rn)) throw new Error('Non-numeric operand in arithmetic expression');
+  1013→      switch (node.op) {
+  1014→        case '+': return ln + rn;
+  1015→        case '-': return ln - rn;
+  1016→        case '*': return ln * rn;
+  1017→        case '/': return rn === 0 ? 0 : ln / rn;
+  1018→        case '%': return rn === 0 ? 0 : ln % rn;
+  1019→      }
+  1020→      throw new Error('Unknown operator: ' + node.op);
+  1021→    }
+  1022→    throw new Error('Cannot evaluate AST node: ' + node.type);
+  1023→  }
+  1024→
+  1025→  // Public façade — tokenize + parse + evaluate. AST is cached per expression
+  1026→  // (via the closure on the parsed result) so per-row evaluation skips parsing.
+  1027→  function makeExprEvaluator(expression) {
+  1028→    var tokens = tokenizeExpr(expression);
+  1029→    var ast = parseExpr(tokens);
+  1030→    return function (row) { return evalAst(ast, row); };
+  1031→  }
+  1032→
+  1033→  // ─── Case-insensitive column resolver ──────────────────────────────────────
+  1034→  // Groq frequently returns column names in a DIFFERENT CASE than the actual
+  1035→  // data — e.g. valueColumn: "QTY" when the data has lowercase "qty", or
+  1036→  // "Revenue" when the data has "revenue". Without a resolver, r["QTY"]
+  1037→  // returns undefined → Number(undefined) is NaN → NaN propagates through
+  1038→  // sum/avg/min/max → the entire result column shows as NaN.
+  1039→  //
+  1040→  // The resolver: exact match first, case-insensitive match second, falls
+  1041→  // back to the original name (so undefined values surface the bug visibly
+  1042→  // in the result — better than silently failing).
+  1043→  var _colLookupCache = {};
+  1044→  function resolveColumn(name, docColumns) {
+  1045→    if (!name) return name;
+  1046→    if (docColumns.indexOf(name) >= 0) return name;
+  1047→    var cacheKey = name.toLowerCase() + '\u0001' + docColumns.join('\u0001');
+  1048→    if (_colLookupCache[cacheKey]) return _colLookupCache[cacheKey];
+  1049→    var lower = name.toLowerCase();
+  1050→    for (var i = 0; i < docColumns.length; i++) {
+  1051→      if (docColumns[i].toLowerCase() === lower) {
+  1052→        _colLookupCache[cacheKey] = docColumns[i];
+  1053→        return docColumns[i];
+  1054→      }
+  1055→    }
+  1056→    _colLookupCache[cacheKey] = name;
+  1057→    return name;
+  1058→  }
+  1059→
+  1060→  // ─── AI text-task executor (summary / bullet_points / Q&A) ────────────────
+  1061→  // Used when the spec has `aiTask` instead of `steps[]`. Calls Groq with a
+  1062→  // task-specific prompt, using the document content as context. Returns a
+  1063→  // string (the AI-generated summary / bulleted list / answer).
+  1064→  //
+  1065→  // Document content passed to Groq:
+  1066→  //   - For row-based docs (Excel/CSV): first 30 rows as JSON
+  1067→  //   - For text docs (PDF/Word): first 4000 chars of rawText
+  1068→  //   - For PDFs with detected tables: both the raw text AND the first 30 rows
+  1069→  function executeAITask(doc, aiTask) {
+  1070→    var docContent;
+  1071→    if (doc.rows && doc.rows.length) {
+  1072→      docContent = 'First 30 rows of the document (JSON):\n' +
+  1073→        JSON.stringify(doc.rows.slice(0, 30));
+  1074→      if (doc.rawText && doc.rawText.length > 10) {
+  1075→        docContent += '\n\nAdditional document text (first 2000 chars):\n' +
+  1076→          doc.rawText.slice(0, 2000);
+  1077→      }
+  1078→    } else if (doc.rawText) {
+  1079→      docContent = 'Document text (first 4000 chars):\n' + doc.rawText.slice(0, 4000);
+  1080→    } else {
+  1081→      docContent = '(empty document — no extractable content)';
+  1082→    }
+  1083→
+  1084→    var taskType = aiTask.type || 'summary';
+  1085→    var systemPrompt, userPrompt;
+  1086→
+  1087→    if (taskType === 'qa') {
+  1088→      var question = aiTask.question || 'What is this document about?';
+  1089→      systemPrompt = 'You are an analyst answering questions about a document. ' +
+  1090→        'Answer using only information from the document. Be specific. ' +
+  1091→        'If the document does not contain the answer, say so honestly. ' +
+  1092→        '2-4 sentences, plain text, no markdown, no headers.';
+  1093→      userPrompt = 'Document: ' + doc.name + ' (' + doc.type + ')\n\n' +
+  1094→        docContent + '\n\n' +
+  1095→        'Question: ' + question + '\n\n' +
+  1096→        'Answer:';
+  1097→    } else if (taskType === 'bullet_points') {
+  1098→      var count = aiTask.count || 6;
+  1099→      systemPrompt = 'You are an analyst extracting main points from a document. ' +
+  1100→        'List ' + count + ' main points as a bulleted list. ' +
+  1101→        'Each point: one sentence, a specific fact / trend / insight from the document. ' +
+  1102→        'Output: one bullet per line, each starting with \u2022 (a bullet character). ' +
+  1103→        'No markdown headers, no intro paragraph, just the bulleted list.';
+  1104→      userPrompt = 'Document: ' + doc.name + ' (' + doc.type + ')\n\n' +
+  1105→        docContent + '\n\n' +
+  1106→        'List ' + count + ' main points:';
+  1107→    } else {
+  1108→      // summary (default)
+  1109→      var lengthHint = aiTask.length === 'short' ? '1 paragraph (3-4 sentences)' :
+  1110→                       aiTask.length === 'long' ? '3-4 paragraphs' :
+  1111→                       '2 paragraphs (4-6 sentences total)';
+  1112→      systemPrompt = 'You are an analyst writing a plain-English summary of a document. ' +
+  1113→        'Capture the document\'s purpose, key data points, notable patterns, and any anomalies. ' +
+  1114→        'Write ' + lengthHint + '. ' +
+  1115→        'Plain text, no markdown, no headers, just paragraphs.';
+  1116→      userPrompt = 'Document: ' + doc.name + ' (' + doc.type + ')\n\n' +
+  1117→        docContent + '\n\n' +
+  1118→        'Summary:';
+  1119→    }
+  1120→
+  1121→    return callGroq(
+  1122→      [{ role: 'system', content: systemPrompt },
+  1123→       { role: 'user', content: userPrompt }],
+  1124→      { temperature: 0.3, max_tokens: 800 }
+  1125→    ).then(function (content) {
+  1126→      return (content || '').trim();
+  1127→    });
+  1128→  }
+  1129→
+  1130→  // ─── Pipeline executor ─────────────────────────────────────────────────────
+  1131→  // Runs each step in order over a shallow-cloned row array. Each step mutates
+  1132→  // the array (filter shortens, summarize reshapes, sort reorders, etc.). The
+  1133→  // final shape is returned to the renderer.
+  1134→  function executePipeline(doc, spec) {
+  1135→    var rows = (doc.rows || []).slice();
+  1136→    var docCols = doc.columns || (rows.length ? Object.keys(rows[0]) : []);
+  1137→    _colLookupCache = {};  // reset per-execution
+  1138→    (spec.steps || []).forEach(function (step) {
+  1139→      if (step.type === 'filter') {
+  1140→        var fCol = resolveColumn(step.column, docCols);
+  1141→        rows = rows.filter(function (r) {
+  1142→          var v = r[fCol];
+  1143→          switch (step.operator) {
+  1144→            case '==':  return String(v) == String(step.value);
+  1145→            case '!=':  return String(v) != String(step.value);
+  1146→            case '>':   return Number(v) >  Number(step.value);
+  1147→            case '<':   return Number(v) <  Number(step.value);
+  1148→            case '>=':  return Number(v) >= Number(step.value);
+  1149→            case '<=':  return Number(v) <= Number(step.value);
+  1150→            case 'contains':
+  1151→              return String(v).toLowerCase().indexOf(String(step.value).toLowerCase()) >= 0;
+  1152→            default: return true;
+  1153→          }
+  1154→        });
+  1155→      } else if (step.type === 'summarize') {
+  1156→        var groupByRaw = step.groupBy && step.groupBy.length ? step.groupBy : [];
+  1157→        var groupBy = groupByRaw.map(function (c) { return resolveColumn(c, docCols); });
+  1158→        var valCol = step.valueColumn ? resolveColumn(step.valueColumn, docCols) : null;
+  1159→        var groups = {};
+  1160→        var order = [];
+  1161→        rows.forEach(function (r) {
+  1162→          var key = groupBy.map(function (c) { return r[c]; }).join(' | ');
+  1163→          if (!groups[key]) { groups[key] = { count: 0, sum: 0, min: Infinity, max: -Infinity }; order.push(key); }
+  1164→          var g = groups[key];
+  1165→          var val = valCol ? Number(r[valCol]) : 0;
+  1166→          if (isNaN(val)) val = 0;  // guard against NaN propagation
+  1167→          g.count++;
+  1168→          if (valCol) {
+  1169→            g.sum += val;
+  1170→            g.min = Math.min(g.min, val);
+  1171→            g.max = Math.max(g.max, val);
+  1172→          }
+  1173→        });
+  1174→        rows = order.map(function (key) {
+  1175→          var g = groups[key];
+  1176→          var parts = key.split(' | ');
+  1177→          var row = {};
+  1178→          groupBy.forEach(function (c, i) { row[c] = parts[i]; });
+  1179→          if (valCol) {
+  1180→            var agg = step.aggregation || 'sum';
+  1181→            row[agg + '_of_' + valCol] =
+  1182→              agg === 'sum'   ? g.sum :
+  1183→              agg === 'count' ? g.count :
+  1184→              agg === 'avg'   ? (g.count ? g.sum / g.count : 0) :
+  1185→              agg === 'min'   ? (g.min === Infinity ? 0 : g.min) :
+  1186→              agg === 'max'   ? (g.max === -Infinity ? 0 : g.max) : null;
+  1187→          } else {
+  1188→            row.count = g.count;
+  1189→          }
+  1190→          return row;
+  1191→        });
+  1192→      } else if (step.type === 'sort') {
+  1193→        var sCol = resolveColumn(step.column, docCols);
+  1194→        var order2 = step.order === 'desc' ? -1 : 1;
+  1195→        rows.sort(function (a, b) {
+  1196→          var av = a[sCol], bv = b[sCol];
+  1197→          if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * order2;
+  1198→          return order2 * String(av).localeCompare(String(bv));
+  1199→        });
+  1200→      } else if (step.type === 'limit') {
+  1201→        rows = rows.slice(0, Math.max(0, step.count | 0));
+  1202→      } else if (step.type === 'select') {
+  1203→        var selColsRaw = step.columns || [];
+  1204→        var selCols = selColsRaw.map(function (c) { return resolveColumn(c, docCols); });
+  1205→        rows = rows.map(function (r) {
+  1206→          var o = {};
+  1207→          selCols.forEach(function (c) { o[c] = r[c]; });
+  1208→          return o;
+  1209→        });
+  1210→      } else if (step.type === 'transform') {
+  1211→        // Build the evaluator ONCE, then map — parsing per row would be wasteful.
+  1212→        var evalFn;
+  1213→        try { evalFn = makeExprEvaluator(step.expression); }
+  1214→        catch (e) { throw new Error('Transform step has an invalid expression: ' + e.message); }
+  1215→        var newCol = step.newColumn || 'computed';
+  1216→        rows = rows.map(function (r) {
+  1217→          var o = Object.assign({}, r);
+  1218→          try { o[newCol] = evalFn(r); } catch (e) { o[newCol] = ''; }
+  1219→          return o;
+  1220→        });
+  1221→      }
+  1222→      // Unknown step types are silently skipped — the spec validator already
+  1223→      // filtered out garbage, so this is a defensive no-op.
+  1224→    });
+  1225→    return { rows: rows, columns: rows.length ? Object.keys(rows[0]) : [] };
+  1226→  }
+  1227→
+  1228→  // ─── Theme helpers (mirror blog-markets-dashboard pattern) ──────────────────
+  1229→  // Reads <html data-theme> dynamically and falls back to 'dark'. The mount
+  1230→  // may override via data-pb-theme (escape hatch for blog posts that want a
+  1231→  // fixed demo theme independent of the site toggle).
+  1232→  function getTheme() {
+  1233→    var mount = $(MOUNT_ID);
+  1234→    if (mount) {
+  1235→      var t = mount.getAttribute('data-pb-theme');
+  1236→      if (t === 'light' || t === 'dark') return t;
+  1237→    }
+  1238→    var html = document.documentElement.getAttribute('data-theme');
+  1239→    return html === 'light' ? 'light' : 'dark';
+  1240→  }
+  1241→  function axisLabelColor() { return getTheme() === 'dark' ? '#a8b3c7' : '#475569'; }
+  1242→  function tooltipBgColor() { return getTheme() === 'dark' ? 'rgba(15,23,42,.95)' : 'rgba(255,255,255,.97)'; }
+  1243→  function tooltipTextColor() { return getTheme() === 'dark' ? '#e6edf7' : '#0f172a'; }
+  1244→  function chartGridColor() { return getTheme() === 'dark' ? 'rgba(255,255,255,.07)' : 'rgba(15,23,42,.07)'; }
+  1245→
+  1246→  // ─── CSS injection ──────────────────────────────────────────────────────────
+  1247→  // All pipeline-builder-specific CSS lives in a single injected <style> block,
+  1248→  // scoped with the .pb- prefix so it can't clash with the site stylesheet.
+  1249→  // Reuses the site's design tokens (--bg, --surface, --border, --text, etc.)
+  1250→  // and the site's .btn / .btn-primary / .btn-ghost classes (defined globally).
+  1251→  function injectCSS() {
+  1252→    if ($('pb-style')) return;
+  1253→    var css = '\
+  1254→.pb-app { font-family: var(--font-body); color: var(--text); max-width: 980px; margin: 0 auto; padding: 0; }\
+  1255→.pb-app * { box-sizing: border-box; }\
+  1256→.pb-card {\
+  1257→  background: var(--surface);\
+  1258→  border: 1px solid var(--border);\
+  1259→  border-radius: var(--radius);\
+  1260→  padding: 24px;\
+  1261→  margin-bottom: 20px;\
+  1262→  box-shadow: var(--shadow-sm);\
+  1263→}\
+  1264→.pb-card-title {\
+  1265→  font-family: var(--font-head);\
+  1266→  font-size: 1.15rem;\
+  1267→  font-weight: 700;\
+  1268→  margin: 0 0 4px;\
+  1269→  letter-spacing: -0.01em;\
+  1270→  color: var(--text);\
+  1271→}\
+  1272→.pb-card-sub { color: var(--text-soft); font-size: 0.88rem; margin: 0 0 18px; }\
+  1273→.pb-card-step {\
+  1274→  display: inline-block;\
+  1275→  font-family: var(--font-head);\
+  1276→  font-size: 0.7rem;\
+  1277→  font-weight: 600;\
+  1278→  letter-spacing: 0.08em;\
+  1279→  text-transform: uppercase;\
+  1280→  color: var(--indigo);\
+  1281→  margin-bottom: 6px;\
+  1282→}\
+  1283→.pb-drop {\
+  1284→  border: 2px dashed var(--border-strong);\
+  1285→  border-radius: var(--radius);\
+  1286→  padding: 36px 24px;\
+  1287→  text-align: center;\
+  1288→  cursor: pointer;\
+  1289→  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);\
+  1290→  background: var(--bg-alt);\
+  1291→}\
+  1292→.pb-drop:hover, .pb-drop.pb-dragover {\
+  1293→  border-color: var(--indigo);\
+  1294→  background: linear-gradient(135deg, rgba(99,102,241,0.06), rgba(6,182,212,0.06));\
+  1295→}\
+  1296→.pb-drop-icon { font-size: 2rem; color: var(--indigo); margin-bottom: 8px; }\
+  1297→.pb-drop-text { color: var(--text); font-weight: 600; margin-bottom: 4px; }\
+  1298→.pb-drop-hint { color: var(--text-soft); font-size: 0.82rem; }\
+  1299→.pb-divider {\
+  1300→  display: flex; align-items: center; gap: 12px;\
+  1301→  color: var(--text-soft); font-size: 0.82rem; margin: 22px 0 14px;\
+  1302→}\
+  1303→.pb-divider::before, .pb-divider::after {\
+  1304→  content: ""; flex: 1; height: 1px; background: var(--border);\
+  1305→}\
+  1306→.pb-sample-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }\
+  1307→.pb-sample {\
+  1308→  background: var(--bg-alt);\
+  1309→  border: 1px solid var(--border);\
+  1310→  border-radius: var(--radius-sm);\
+  1311→  padding: 14px;\
+  1312→  cursor: pointer;\
+  1313→  text-align: left;\
+  1314→  transition: transform 0.2s var(--ease), border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);\
+  1315→  font-family: inherit; color: var(--text); width: 100%;\
+  1316→}\
+  1317→.pb-sample:hover { transform: translateY(-2px); border-color: var(--indigo); box-shadow: 0 12px 26px -14px rgba(99,102,241,0.5); }\
+  1318→.pb-sample-icon { color: var(--indigo); font-size: 1.1rem; margin-bottom: 6px; }\
+  1319→.pb-sample-name { font-weight: 600; font-size: 0.92rem; }\
+  1320→.pb-sample-meta { color: var(--text-soft); font-size: 0.78rem; margin-top: 2px; }\
+  1321→@media (max-width: 720px) { .pb-sample-grid { grid-template-columns: 1fr; } }\
+  1322→\
+  1323→.pb-doc-head { display: flex; align-items: center; gap: 14px; }\
+  1324→.pb-doc-icon {\
+  1325→  width: 44px; height: 44px; border-radius: var(--radius-sm);\
+  1326→  background: linear-gradient(135deg, rgba(99,102,241,0.16), rgba(6,182,212,0.16));\
+  1327→  display: flex; align-items: center; justify-content: center;\
+  1328→  color: var(--indigo); font-size: 1.2rem; flex-shrink: 0;\
+  1329→}\
+  1330→.pb-doc-name { font-weight: 600; color: var(--text); }\
+  1331→.pb-doc-meta { color: var(--text-soft); font-size: 0.82rem; }\
+  1332→.pb-link { background: none; border: none; color: var(--indigo); cursor: pointer; font-size: 0.85rem; padding: 0; text-decoration: underline; font-family: inherit; }\
+  1333→.pb-link:hover { color: var(--cyan); }\
+  1334→\
+  1335→.pb-textarea {\
+  1336→  width: 100%; min-height: 96px; resize: vertical;\
+  1337→  background: var(--bg-alt); border: 1px solid var(--border-strong);\
+  1338→  border-radius: var(--radius-sm); padding: 12px 14px;\
+  1339→  color: var(--text); font-family: var(--font-body); font-size: 0.95rem; line-height: 1.5;\
+  1340→  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);\
+  1341→}\
+  1342→.pb-textarea:focus { outline: none; border-color: var(--indigo); box-shadow: var(--ring); }\
+  1343→\
+  1344→.pb-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 16px; }\
+  1345→.pb-chip-exec { background: linear-gradient(135deg, #4338ca, #0e7490); color: #fff; border-color: transparent; box-shadow: 0 4px 12px -4px rgba(67,56,202,0.45); }\
+  1346→.pb-chip-exec:hover { transform: translateY(-1px); box-shadow: 0 6px 16px -6px rgba(67,56,202,0.6); }\
+  1347→.pb-chip {\
+  1348→  background: var(--bg-alt); border: 1px solid var(--border);\
+  1349→  border-radius: 999px; padding: 7px 14px; cursor: pointer;\
+  1350→  font-size: 0.82rem; color: var(--text-muted); font-family: inherit;\
+  1351→  transition: border-color 0.2s var(--ease), color 0.2s var(--ease), background 0.2s var(--ease);\
+  1352→}\
+  1353→.pb-chip:hover { border-color: var(--indigo); color: var(--indigo); background: rgba(99,102,241,0.06); }\
+  1354→\
+  1355→.pb-btn-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }\
+  1356→.pb-btn-sm { min-height: 38px; padding: 8px 16px; font-size: 0.85rem; border-radius: 999px; }\
+  1357→.pb-btn-row .pb-spacer { flex: 1; }\
+  1358→\
+  1359→.pb-step-list { list-style: none; padding: 0; margin: 12px 0 0; }\
+  1360→.pb-step-item { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }\
+  1361→.pb-step-item:first-child { border-top: none; padding-top: 4px; }\
+  1362→.pb-step-num {\
+  1363→  flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;\
+  1364→  background: var(--gradient); color: #fff; font-size: 0.78rem; font-weight: 700;\
+  1365→  display: flex; align-items: center; justify-content: center; font-family: var(--font-head);\
+  1366→}\
+  1367→.pb-step-body { flex: 1; min-width: 0; }\
+  1368→.pb-step-type {\
+  1369→  display: inline-block; font-family: var(--font-head); font-size: 0.68rem; font-weight: 600;\
+  1370→  text-transform: uppercase; letter-spacing: 0.06em;\
+  1371→  background: rgba(99,102,241,0.12); color: var(--indigo);\
+  1372→  padding: 2px 8px; border-radius: 6px; margin-bottom: 4px;\
+  1373→}\
+  1374→.pb-step-desc { color: var(--text); font-size: 0.92rem; margin: 0 0 4px; }\
+  1375→.pb-step-params { color: var(--text-soft); font-size: 0.78rem; font-family: var(--font-body); word-break: break-word; }\
+  1376→\
+  1377→.pb-collapsible-toggle {\
+  1378→  background: none; border: 1px solid var(--border); color: var(--text-muted);\
+  1379→  padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.8rem;\
+  1380→  font-family: inherit; display: inline-flex; align-items: center; gap: 6px;\
+  1381→}\
+  1382→.pb-collapsible-toggle:hover { border-color: var(--indigo); color: var(--indigo); }\
+  1383→.pb-pre {\
+  1384→  background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--radius-sm);\
+  1385→  padding: 14px; overflow: auto; margin: 12px 0 0; font-size: 0.78rem; line-height: 1.5;\
+  1386→  color: var(--text-muted); max-height: 320px; white-space: pre; font-family: "SFMono-Regular", Consolas, monospace;\
+  1387→}\
+  1388→\
+  1389→.pb-result-summary { color: var(--text-soft); font-size: 0.85rem; margin: 0 0 14px; }\
+  1390→.pb-table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); max-height: 520px; }\
+  1391→.pb-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }\
+  1392→.pb-table th, .pb-table td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }\
+  1393→.pb-table th {\
+  1394→  background: var(--bg-alt); color: var(--text-muted); font-family: var(--font-head);\
+  1395→  font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em;\
+  1396→  position: sticky; top: 0; z-index: 1;\
+  1397→}\
+  1398→.pb-table td.num { text-align: right; font-variant-numeric: tabular-nums; }\
+  1399→.pb-table tbody tr:hover { background: rgba(99,102,241,0.04); }\
+  1400→.pb-table-empty { padding: 36px; text-align: center; color: var(--text-soft); }\
+  1401→.pb-load-more {\
+  1402→  display: block; margin: 14px auto 0; background: var(--bg-alt); border: 1px solid var(--border);\
+  1403→  color: var(--text-muted); padding: 8px 18px; border-radius: 999px; cursor: pointer; font-family: inherit; font-size: 0.82rem;\
+  1404→}\
+  1405→.pb-load-more:hover { border-color: var(--indigo); color: var(--indigo); }\
+  1406→\
+  1407→.pb-chart-card { background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-top: 18px; }\
+  1408→.pb-chart-title { font-family: var(--font-head); font-size: 0.82rem; font-weight: 600; color: var(--text-muted); margin: 0 0 6px; }\
+  1409→.pb-chart-body { width: 100%; height: 360px; }\
+  1410→.pb-chart-empty { padding: 36px; text-align: center; color: var(--text-soft); font-size: 0.85rem; }\
+  1411→\
+  1412→.pb-download-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }\
+  1413→\
+  1414→.pb-analysis-card { background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; margin-top: 16px; }\
+  1415→.pb-analysis-title { font-family: var(--font-head); font-size: 0.92rem; font-weight: 600; margin: 0 0 4px; }\
+  1416→.pb-analysis-summary { color: var(--text-muted); font-size: 0.88rem; margin: 0 0 12px; }\
+  1417→.pb-analysis-section { margin-top: 10px; }\
+  1418→.pb-analysis-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-soft); margin: 0 0 4px; font-family: var(--font-head); }\
+  1419→.pb-analysis-list { margin: 0; padding-left: 18px; color: var(--text-muted); font-size: 0.84rem; }\
+  1420→.pb-analysis-list li { margin-bottom: 3px; }\
+  1421→.pb-pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }\
+  1422→.pb-pill { background: rgba(6,182,212,0.1); color: var(--cyan); border: 1px solid rgba(6,182,212,0.25); border-radius: 6px; padding: 3px 8px; font-size: 0.74rem; font-family: var(--font-head); font-weight: 600; }\
+  1423→\
+  1424→.pb-error {\
+  1425→  background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3);\
+  1426→  border-radius: var(--radius-sm); padding: 12px 16px; color: #b91c1c; margin-top: 12px; font-size: 0.88rem;\
+  1427→}\
+  1428→[data-theme="dark"] .pb-error { color: #fca5a5; }\
+  1429→.pb-warn {\
+  1430→  background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.28);\
+  1431→  border-radius: var(--radius-sm); padding: 10px 14px; color: #b45309; margin-top: 12px; font-size: 0.82rem;\
+  1432→}\
+  1433→[data-theme="dark"] .pb-warn { color: #fcd34d; }\
+  1434→\
+  1435→.pb-loading { display: flex; align-items: center; gap: 10px; color: var(--text-soft); font-size: 0.88rem; padding: 14px 0; }\
+  1436→.pb-loading-block { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 32px 16px; text-align: center; color: var(--text-soft); font-size: 0.95rem; }\
+  1437→.pb-loading-sub { font-size: 0.78rem; color: var(--text-soft); opacity: 0.7; }\
+  1438→.pb-spinner {\
+  1439→  width: 16px; height: 16px; border: 2px solid var(--border-strong); border-top-color: var(--indigo);\
+  1440→  border-radius: 50%; animation: pb-spin 0.8s linear infinite; flex-shrink: 0;\
+  1441→}\
+  1442→@keyframes pb-spin { to { transform: rotate(360deg); } }\
+  1443→\
+  1444→.pb-email-html-preview { max-height: 480px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 0; background: #f8fafc; }\
+  1445→.pb-email-html-preview > div { margin: 0 !important; }\
+  1446→.pb-modal-pre { white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; line-height: 1.6; color: var(--text-soft); background: var(--surface-2); padding: 14px 16px; border-radius: 8px; max-height: 360px; overflow-y: auto; }\
+  1447→.pb-ai-result-card { padding: 20px 24px; border-radius: var(--radius); background: linear-gradient(135deg, rgba(99,102,241,0.04), rgba(6,182,212,0.03)); border: 1px solid var(--border); margin-top: 8px; }\
+  1448→.pb-ai-result-text { font-size: 0.98rem; line-height: 1.75; color: var(--text); white-space: normal; }\
+  1449→.pb-ai-result-text br + br { margin-top: 8px; }\
+  1450→\
+  1451→.pb-saved-list { list-style: none; padding: 0; margin: 0; }\
+  1452→.pb-saved-item {\
+  1453→  display: flex; align-items: center; gap: 12px; padding: 12px 0;\
+  1454→  border-top: 1px solid var(--border); flex-wrap: wrap;\
+  1455→}\
+  1456→.pb-saved-item:first-child { border-top: none; }\
+  1457→.pb-saved-info { flex: 1; min-width: 180px; }\
+  1458→.pb-saved-name { font-weight: 600; color: var(--text); font-size: 0.9rem; }\
+  1459→.pb-saved-meta { color: var(--text-soft); font-size: 0.78rem; }\
+  1460→.pb-saved-actions { display: flex; gap: 6px; }\
+  1461→\
+  1462→.pb-empty { color: var(--text-soft); font-size: 0.88rem; padding: 18px 0; text-align: center; }\
+  1463→\
+  1464→.pb-modal-backdrop {\
+  1465→  position: fixed; inset: 0; background: rgba(15,23,42,0.55); backdrop-filter: blur(4px);\
+  1466→  display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 20px;\
+  1467→}\
+  1468→.pb-modal {\
+  1469→  background: var(--bg-elevated, var(--surface)); border: 1px solid var(--border-strong);\
+  1470→  border-radius: var(--radius); padding: 24px; max-width: 640px; width: 100%; max-height: 80vh; overflow: auto;\
+  1471→  box-shadow: var(--shadow-lg);\
+  1472→}\
+  1473→.pb-modal-title { font-family: var(--font-head); font-size: 1.1rem; font-weight: 700; margin: 0 0 14px; }\
+  1474→.pb-modal-body { color: var(--text); font-size: 0.9rem; }\
+  1475→.pb-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }\
+  1476→.pb-modal-pre {\
+  1477→  background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--radius-sm);\
+  1478→  padding: 12px; white-space: pre-wrap; word-break: break-word; font-size: 0.78rem;\
+  1479→  color: var(--text-muted); max-height: 320px; overflow: auto; font-family: "SFMono-Regular", Consolas, monospace;\
+  1480→}\
+  1481→.pb-input {\
+  1482→  width: 100%; background: var(--bg-alt); border: 1px solid var(--border-strong);\
+  1483→  border-radius: var(--radius-sm); padding: 10px 12px; color: var(--text); font-family: inherit; font-size: 0.92rem;\
+  1484→}\
+  1485→.pb-input:focus { outline: none; border-color: var(--indigo); box-shadow: var(--ring); }\
+  1486→.pb-toggle-row { display: flex; gap: 18px; align-items: center; margin: 10px 0 14px; font-size: 0.85rem; color: var(--text-muted); }\
+  1487→.pb-toggle-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }\
+  1488→.pb-toggle-row input[type="radio"] { cursor: pointer; }\
+  1489→.pb-toggle-disabled { opacity: 0.45; cursor: not-allowed; }\
+  1490→.pb-toggle-disabled label, .pb-toggle-disabled input { cursor: not-allowed; }\
+  1491→.pb-toggle-tip { font-size: 0.74rem; color: var(--text-soft); margin-left: 4px; }\
+  1492→.pb-rate-note { color: var(--text-soft); font-size: 0.74rem; margin-top: 10px; text-align: right; }\
+  1493→';
+  1494→    var style = document.createElement('style');
+  1495→    style.id = 'pb-style';
+  1496→    style.textContent = css;
+  1497→    document.head.appendChild(style);
+  1498→  }
+  1499→
+  1500→  // ─── HTML table renderer ────────────────────────────────────────────────────
+  1501→  // Returns an HTML string. Numeric columns detected by scanning the first
+  1502→  // non-empty cell of each column — right-aligned + number-formatted.
+  1503→  function detectNumericColumns(rows, columns) {
+  1504→    var isNum = {};
+  1505→    columns.forEach(function (c) {
+  1506→      var found = false;
+  1507→      for (var i = 0; i < rows.length && i < 20; i++) {
+  1508→        var v = rows[i][c];
+  1509→        if (v !== '' && v != null) {
+  1510→          isNum[c] = typeof v === 'number' || (!isNaN(Number(v)) && /^-?\d+(\.\d+)?$/.test(String(v).replace(/[,$]/g, '')));
+  1511→          found = true;
+  1512→          break;
+  1513→        }
+  1514→      }
+  1515→      if (!found) isNum[c] = false;
+  1516→    });
+  1517→    return isNum;
+  1518→  }
+  1519→
+  1520→  function renderTableHTML(rows, columns, visibleRows) {
+  1521→    if (!rows.length) {
+  1522→      return '<div class="pb-table-empty">No rows match this pipeline.</div>';
+  1523→    }
+  1524→    var isNum = detectNumericColumns(rows, columns);
+  1525→    var shown = rows.slice(0, visibleRows);
+  1526→    var html = '<div class="pb-table-wrap"><table class="pb-table"><thead><tr>';
+  1527→    columns.forEach(function (c) { html += '<th class="' + (isNum[c] ? 'num' : '') + '">' + esc(c) + '</th>'; });
+  1528→    html += '</tr></thead><tbody>';
+  1529→    shown.forEach(function (r) {
+  1530→      html += '<tr>';
+  1531→      columns.forEach(function (c) {
+  1532→        var v = r[c];
+  1533→        var cell;
+  1534→        if (isNum[c]) cell = fmtNumber(v);
+  1535→        else cell = esc(v);
+  1536→        html += '<td class="' + (isNum[c] ? 'num' : '') + '">' + cell + '</td>';
+  1537→      });
+  1538→      html += '</tr>';
+  1539→    });
+  1540→    html += '</tbody></table></div>';
+  1541→    if (rows.length > visibleRows) {
+  1542→      html += '<button class="pb-load-more" id="pb-load-more">Load more (' + (rows.length - visibleRows) + ' remaining)</button>';
+  1543→    }
+  1544→    return html;
+  1545→  }
+  1546→
+  1547→  // ─── ECharts chart renderer ──────────────────────────────────────────────────
+  1548→  // Auto-picks chart type from data shape:
+  1549→  //   • 1 row → no chart
+  1550→  //   • 2 cols, col1 categorical + col2 numeric → bar
+  1551→  //   • 2 cols, col1 looks like a date → line (sorted by date)
+  1552→  //   • 3+ cols, col1 categorical + rest numeric → grouped bar
+  1553→  //   • otherwise → "chart not available" message
+  1554→  function looksLikeDateColumn(rows, col) {
+  1555→    if (!rows.length) return false;
+  1556→    var parsed = 0, total = 0;
+  1557→    for (var i = 0; i < Math.min(rows.length, 12); i++) {
+  1558→      var v = rows[i][col];
+  1559→      if (v == null || v === '') continue;
+  1560→      total++;
+  1561→      var d = new Date(v);
+  1562→      if (!isNaN(d.getTime()) && d.getFullYear() > 1990) parsed++;
+  1563→    }
+  1564→    return total >= 3 && parsed / total >= 0.7;
+  1565→  }
+  1566→  function isNumericVal(v) {
+  1567→    if (typeof v === 'number') return true;
+  1568→    return v != null && v !== '' && !isNaN(Number(String(v).replace(/[,$]/g, ''))) && /^-?\d+(\.\d+)?$/.test(String(v).replace(/[,$]/g, ''));
+  1569→  }
+  1570→
+  1571→  function renderChart(mount) {
+  1572→    var body = mount.querySelector('.pb-chart-body');
+  1573→    if (!body) return;
+  1574→    var res = state.result;
+  1575→    if (!res || !res.rows || res.rows.length <= 1 || !res.columns.length) {
+  1576→      body.innerHTML = '<div class="pb-chart-empty">Chart not available for this data shape.</div>';
+  1577→      return;
+  1578→    }
+  1579→    var cols = res.columns;
+  1580→    var rows = res.rows;
+  1581→    var picked = pickChartConfig(rows, cols);
+  1582→    if (!picked) {
+  1583→      body.innerHTML = '<div class="pb-chart-empty">Chart not available for this data shape.</div>';
+  1584→      return;
+  1585→    }
+  1586→    loadScript('echarts').then(function () {
+  1587→      try {
+  1588→        if (state.chart) { try { state.chart.dispose(); } catch (e) {} state.chart = null; }
+  1589→        var inst = echarts.init(body, null, { renderer: 'canvas' });
+  1590→        inst.setOption(picked);
+  1591→        state.chart = inst;
+  1592→        // Resize handler — only bound once.
+  1593→        if (!renderChart._resizeBound) {
+  1594→          window.addEventListener('resize', function () {
+  1595→            if (state.chart) try { state.chart.resize(); } catch (e) {}
+  1596→          });
+  1597→          renderChart._resizeBound = true;
+  1598→        }
+  1599→      } catch (e) {
+  1600→        body.innerHTML = '<div class="pb-chart-empty">Chart rendering failed.</div>';
+  1601→      }
+  1602→    }).catch(function () {
+  1603→      body.innerHTML = '<div class="pb-chart-empty">Couldn\u2019t load the chart library.</div>';
+  1604→    });
+  1605→  }
+  1606→
+  1607→  function pickChartConfig(rows, cols) {
+  1608→    var theme = getTheme();
+  1609→    var baseTooltip = {
+  1610→      trigger: 'axis',
+  1611→      backgroundColor: tooltipBgColor(),
+  1612→      textStyle: { color: tooltipTextColor() },
+  1613→      borderColor: 'rgba(99,102,241,0.2)'
+  1614→    };
+  1615→    var axisLabel = { color: axisLabelColor(), fontSize: 11 };
+  1616→    var splitLine = { lineStyle: { color: chartGridColor() } };
+  1617→    var axisLine  = { lineStyle: { color: chartGridColor() } };
+  1618→    var gradient = ['#6366f1', '#06b6d4', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#3b82f6'];
+  1619→
+  1620→    // 2-column cases.
+  1621→    if (cols.length === 2) {
+  1622→      var c1 = cols[0], c2 = cols[1];
+  1623→      // Categorical + numeric → bar.
+  1624→      if (!looksLikeDateColumn(rows, c1) && rows.every(function (r) { return isNumericVal(r[c2]); })) {
+  1625→        return {
+  1626→          tooltip: baseTooltip,
+  1627→          grid: { left: 50, right: 24, top: 24, bottom: 60, containLabel: true },
+  1628→          xAxis: { type: 'category', data: rows.map(function (r) { return String(r[c1]); }), axisLabel: Object.assign({}, axisLabel, { rotate: rows.length > 6 ? 35 : 0 }), axisLine: axisLine, axisTick: { lineStyle: { color: chartGridColor() } } },
+  1629→          yAxis: { type: 'value', axisLabel: axisLabel, splitLine: splitLine, axisLine: axisLine },
+  1630→          series: [{ type: 'bar', data: rows.map(function (r) { return Number(r[c2]); }), itemStyle: { color: gradient[0], borderRadius: [4, 4, 0, 0] } }]
+  1631→        };
+  1632→      }
+  1633→      // Date + numeric → line.
+  1634→      if (looksLikeDateColumn(rows, c1) && rows.every(function (r) { return isNumericVal(r[c2]); })) {
+  1635→        var sorted = rows.slice().sort(function (a, b) { return new Date(a[c1]) - new Date(b[c1]); });
+  1636→        return {
+  1637→          tooltip: baseTooltip,
+  1638→          grid: { left: 50, right: 24, top: 24, bottom: 60, containLabel: true },
+  1639→          xAxis: { type: 'category', data: sorted.map(function (r) { return String(r[c1]); }), axisLabel: Object.assign({}, axisLabel, { rotate: 35 }), axisLine: axisLine, axisTick: { lineStyle: { color: chartGridColor() } } },
+  1640→          yAxis: { type: 'value', axisLabel: axisLabel, splitLine: splitLine, axisLine: axisLine },
+  1641→          series: [{ type: 'line', data: sorted.map(function (r) { return Number(r[c2]); }), smooth: true, symbol: 'circle', symbolSize: 6, lineStyle: { color: gradient[0], width: 2 }, itemStyle: { color: gradient[0] }, areaStyle: { color: 'rgba(99,102,241,0.12)' } }]
+  1642→        };
+  1643→      }
+  1644→      return null;
+  1645→    }
+  1646→    // 3+ column cases: categorical col1 + remaining numeric → grouped bar.
+  1647→    if (cols.length >= 3) {
+  1648→      var c1g = cols[0];
+  1649→      var numericCols = cols.slice(1).filter(function (c) {
+  1650→        return rows.every(function (r) { return isNumericVal(r[c]); });
+  1651→      });
+  1652→      if (numericCols.length >= 1) {
+  1653→        var cats = rows.map(function (r) { return String(r[c1g]); });
+  1654→        var series = numericCols.map(function (c, idx) {
+  1655→          return {
+  1656→            name: c, type: 'bar',
+  1657→            data: rows.map(function (r) { return Number(r[c]); }),
+  1658→            itemStyle: { color: gradient[idx % gradient.length], borderRadius: [4, 4, 0, 0] }
+  1659→          };
+  1660→        });
+  1661→        return {
+  1662→          tooltip: baseTooltip,
+  1663→          legend: { data: numericCols, textStyle: { color: axisLabelColor() }, top: 0 },
+  1664→          grid: { left: 50, right: 24, top: 40, bottom: 60, containLabel: true },
+  1665→          xAxis: { type: 'category', data: cats, axisLabel: Object.assign({}, axisLabel, { rotate: cats.length > 6 ? 35 : 0 }), axisLine: axisLine, axisTick: { lineStyle: { color: chartGridColor() } } },
+  1666→          yAxis: { type: 'value', axisLabel: axisLabel, splitLine: splitLine, axisLine: axisLine },
+  1667→          series: series
+  1668→        };
+  1669→      }
+  1670→    }
+  1671→    return null;
+  1672→  }
+  1673→
+  1674→  // ─── Download helpers ──────────────────────────────────────────────────────
+  1675→  function downloadBlob(filename, blob) {
+  1676→    var url = URL.createObjectURL(blob);
+  1677→    var a = document.createElement('a');
+  1678→    a.href = url; a.download = filename;
+  1679→    document.body.appendChild(a);
+  1680→    a.click();
+  1681→    setTimeout(function () {
+  1682→      URL.revokeObjectURL(url);
+  1683→      a.remove();
+  1684→    }, 200);
+  1685→  }
+  1686→
+  1687→  function downloadCSV(rows, columns, filename) {
+  1688→    if (!rows.length) { rows = [{}]; }
+  1689→    var cols = columns.length ? columns : (rows[0] ? Object.keys(rows[0]) : []);
+  1690→    var escCsv = function (v) {
+  1691→      var s = v == null ? '' : String(v);
+  1692→      if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  1693→      return s;
+  1694→    };
+  1695→    var lines = [cols.map(escCsv).join(',')];
+  1696→    rows.forEach(function (r) {
+  1697→      lines.push(cols.map(function (c) { return escCsv(r[c]); }).join(','));
+  1698→    });
+  1699→    var csv = lines.join('\r\n');
+  1700→    downloadBlob(filename || 'pipeline-result.csv', new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  1701→  }
+  1702→
+  1703→  function downloadExcel(rows, columns, filename) {
+  1704→    return loadScript('xlsx').then(function () {
+  1705→      var cols = columns.length ? columns : (rows[0] ? Object.keys(rows[0]) : []);
+  1706→      var data = [cols];
+  1707→      rows.forEach(function (r) { data.push(cols.map(function (c) { return r[c]; })); });
+  1708→      var ws = XLSX.utils.aoa_to_sheet(data);
+  1709→      // Set column widths based on max content length per column (cap at 40 chars).
+  1710→      ws['!cols'] = cols.map(function (c, i) {
+  1711→        var maxLen = String(c).length;
+  1712→        for (var j = 0; j < Math.min(rows.length, 200); j++) {
+  1713→          var v = rows[j][c];
+  1714→          var l = (v == null ? '' : String(v)).length;
+  1715→          if (l > maxLen) maxLen = l;
+  1716→        }
+  1717→        return { wch: Math.min(40, Math.max(10, maxLen + 2)) };
+  1718→      });
+  1719→      // Freeze the header row so it stays visible when scrolling.
+  1720→      ws['!freeze'] = { ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft', state: 'frozen' };
+  1721→      // Bold the header cells (best-effort — SheetJS community edition may
+  1722→      // not preserve styling on all spreadsheet readers, but Excel + LibreOffice
+  1723→      // both honor it).
+  1724→      cols.forEach(function (c, i) {
+  1725→        var addr = XLSX.utils.encode_cell({ r: 0, c: i });
+  1726→        if (ws[addr]) {
+  1727→          ws[addr].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '4338CA' } } };
+  1728→        }
+  1729→      });
+  1730→      var wb = XLSX.utils.book_new();
+  1731→      XLSX.utils.book_append_sheet(wb, ws, 'Results');
+  1732→      var arr = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
+  1733→      downloadBlob(filename || 'pipeline-result.xlsx', new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  1734→    });
+  1735→  }
+  1736→
+  1737→  function downloadPDF(rows, columns, filename, title) {
+  1738→    return loadScript('jspdf').then(function () {
+  1739→      var jsPDF = window.jspdf ? window.jspdf.jsPDF : window.jsPDF;
+  1740→      if (!jsPDF) throw new Error('jsPDF failed to load');
+  1741→      var doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  1742→      var cols = columns.length ? columns : (rows[0] ? Object.keys(rows[0]) : []);
+  1743→      var pageW = doc.internal.pageSize.getWidth();
+  1744→      var pageH = doc.internal.pageSize.getHeight();
+  1745→      var margin = 36;
+  1746→      var generated = new Date().toLocaleString('en-CA', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  1747→      var docName = state.document ? state.document.name : '';
+  1748→      var docMeta = state.document ? (state.document.type.toUpperCase() + ' \u00b7 ' + state.document.rowCount + ' rows') : '';
+  1749→      // ── Branded gradient header bar (two-tone rectangle approximation) ──
+  1750→      doc.setFillColor(67, 56, 202);  // indigo-700
+  1751→      doc.rect(0, 0, pageW, 56, 'F');
+  1752→      doc.setFillColor(14, 116, 144);  // cyan-700
+  1753→      doc.rect(0, 56, pageW, 4, 'F');
+  1754→      doc.setTextColor(255, 255, 255);
+  1755→      doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+  1756→      doc.text('INSIGHT ANALYTICS', margin, 22);
+  1757→      doc.setFontSize(16);
+  1758→      doc.text(title || 'Pipeline Result', margin, 40);
+  1759→      // Generated date right-aligned in header
+  1760→      doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+  1761→      doc.text('Generated ' + generated, pageW - margin, 22, { align: 'right' });
+  1762→      // ── Document metadata box ──
+  1763→      var metaBoxY = 80;
+  1764→      doc.setFillColor(241, 245, 249);  // slate-100
+  1765→      doc.rect(margin, metaBoxY, pageW - 2 * margin, 38, 'F');
+  1766→      doc.setFillColor(67, 56, 202);  // indigo accent strip on left
+  1767→      doc.rect(margin, metaBoxY, 3, 38, 'F');
+  1768→      doc.setTextColor(100, 116, 139); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+  1769→      doc.text('PIPELINE', margin + 14, metaBoxY + 12);
+  1770→      doc.setTextColor(15, 23, 42); doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+  1771→      doc.text(title || 'Pipeline Result', margin + 14, metaBoxY + 26);
+  1772→      if (docName) {
+  1773→        doc.setTextColor(100, 116, 139); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+  1774→        doc.text('Source: ' + docName + (docMeta ? '  \u00b7  ' + docMeta : ''), margin + 250, metaBoxY + 12);
+  1775→      }
+  1776→      doc.setTextColor(100, 116, 139); doc.setFontSize(8);
+  1777→      doc.text(rows.length + ' rows \u00d7 ' + cols.length + ' cols', pageW - margin - 4, metaBoxY + 26, { align: 'right' });
+  1778→      // ── Compute column widths ──
+  1779→      var numericCols = cols.map(function (c) { return isNumericCol(rows, c); });
+  1780→      var maxLens = cols.map(function (c) { return String(c).length; });
+  1781→      rows.slice(0, 200).forEach(function (r) {
+  1782→        cols.forEach(function (c, i) {
+  1783→          var l = fmtVal(r[c]).length;
+  1784→          if (l > maxLens[i]) maxLens[i] = Math.min(28, l);
+  1785→        });
+  1786→      });
+  1787→      var totalLen = maxLens.reduce(function (a, b) { return a + b; }, 0) || 1;
+  1788→      var colWidths = maxLens.map(function (l) { return Math.max(40, (l / totalLen) * (pageW - 2 * margin)); });
+  1789→      var totalW = colWidths.reduce(function (a, b) { return a + b; }, 0);
+  1790→      var scale = (pageW - 2 * margin) / totalW;
+  1791→      colWidths = colWidths.map(function (w) { return w * scale; });
+  1792→      // ── Table ──
+  1793→      var tableTop = metaBoxY + 50;
+  1794→      var rowH = 16;
+  1795→      var headerH = 20;
+  1796→      // Header row
+  1797→      doc.setFillColor(67, 56, 202);  // indigo-700
+  1798→      doc.rect(margin, tableTop, pageW - 2 * margin, headerH, 'F');
+  1799→      doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+  1800→      var x = margin + 6;
+  1801→      cols.forEach(function (c, i) {
+  1802→        var label = String(c).slice(0, Math.floor(colWidths[i] / 4));
+  1803→        if (numericCols[i]) {
+  1804→          doc.text(label, x + colWidths[i] - 6, tableTop + 13, { align: 'right' });
+  1805→        } else {
+  1806→          doc.text(label, x, tableTop + 13);
+  1807→        }
+  1808→        x += colWidths[i];
+  1809→      });
+  1810→      // Body rows
+  1811→      var y = tableTop + headerH;
+  1812→      doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+  1813→      rows.slice(0, 500).forEach(function (r, ridx) {
+  1814→        if (y > pageH - margin - 30) {
+  1815→          // Page footer before page break
+  1816→          doc.setTextColor(100, 116, 139); doc.setFontSize(7);
+  1817→          doc.text('Insight Analytics  \u00b7  Live truth on every desk.  \u00b7  insight-analytics.ca', margin, pageH - 12);
+  1818→          doc.text('Page ' + doc.internal.getNumberOfPages(), pageW - margin, pageH - 12, { align: 'right' });
+  1819→          doc.addPage();
+  1820→          // Repeat header row on the new page
+  1821→          doc.setFillColor(67, 56, 202);
+  1822→          doc.rect(margin, tableTop, pageW - 2 * margin, headerH, 'F');
+  1823→          doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+  1824→          x = margin + 6;
+  1825→          cols.forEach(function (c, i) {
+  1826→            var label = String(c).slice(0, Math.floor(colWidths[i] / 4));
+  1827→            if (numericCols[i]) doc.text(label, x + colWidths[i] - 6, tableTop + 13, { align: 'right' });
+  1828→            else doc.text(label, x, tableTop + 13);
+  1829→            x += colWidths[i];
+  1830→          });
+  1831→          doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+  1832→          y = tableTop + headerH;
+  1833→        }
+  1834→        if (ridx % 2 === 1) {
+  1835→          doc.setFillColor(241, 245, 249);  // slate-100 alternating row
+  1836→          doc.rect(margin, y, pageW - 2 * margin, rowH, 'F');
+  1837→        }
+  1838→        doc.setTextColor(15, 23, 42);
+  1839→        x = margin + 6;
+  1840→        cols.forEach(function (c, i) {
+  1841→          var val = fmtVal(r[c]);
+  1842→          var maxChars = Math.floor(colWidths[i] / 4);
+  1843→          if (val.length > maxChars) val = val.slice(0, maxChars - 1) + '\u2026';
+  1844→          if (numericCols[i]) {
+  1845→            doc.text(val, x + colWidths[i] - 6, y + 11, { align: 'right' });
+  1846→          } else {
+  1847→            doc.text(val, x, y + 11);
+  1848→          }
+  1849→          x += colWidths[i];
+  1850→        });
+  1851→        y += rowH;
+  1852→      });
+  1853→      // ── Page footer (always on last page) ──
+  1854→      doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.5);
+  1855→      doc.line(margin, pageH - 28, pageW - margin, pageH - 28);
+  1856→      doc.setTextColor(100, 116, 139); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+  1857→      doc.text('Insight Analytics  \u00b7  Live truth on every desk.', margin, pageH - 16);
+  1858→      doc.setTextColor(6, 182, 212); doc.setFont('helvetica', 'bold');
+  1859→      doc.text('insight-analytics.ca', pageW - margin, pageH - 16, { align: 'right' });
+  1860→      doc.save(filename || 'pipeline-result.pdf');
+  1861→    });
+  1862→  }
+  1863→
+  1864→  function downloadJSON(obj, filename) {
+  1865→    var blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  1866→    downloadBlob(filename || 'pipeline-spec.json', blob);
+  1867→  }
+  1868→
+  1869→  // ─── Email composer ─────────────────────────────────────────────────────────
+  1870→  // Builds a plain-text ASCII table from the result rows, prepends the spec's
+  1871→  // emailBodyIntro, and opens a mailto: link. Direct-send is a disabled toggle
+  1872→  // ("coming soon"). Preview modal shows subject + body before opening mailto:.
+  1873→  // Format a value for display in plain-text email/preview. Numeric values
+  1874→  // get thousand separators; values that look like currency keep their $.
+  1875→  function fmtVal(v) {
+  1876→    if (v == null || v === '') return '';
+  1877→    if (typeof v === 'number') {
+  1878→      // Use locale-formatted number with thousand separators.
+  1879→      try { return v.toLocaleString('en-CA', { maximumFractionDigits: 2 }); }
+  1880→      catch (e) { return String(v); }
+  1881→    }
+  1882→    return String(v);
+  1883→  }
+  1884→  function isNumericCol(rows, col) {
+  1885→    var n = 0, numericCount = 0;
+  1886→    for (var i = 0; i < rows.length && n < 8; i++) {
+  1887→      var v = rows[i][col];
+  1888→      if (v == null || v === '') continue;
+  1889→      n++;
+  1890→      if (typeof v === 'number' || /^-?[\d,.$%\s]+$/.test(String(v))) numericCount++;
+  1891→    }
+  1892→    return n > 0 && numericCount / n >= 0.7;
+  1893→  }
+  1894→
+  1895→  // Polished plain-text email body — Unicode box-drawing chars for a sleek
+  1896→  // branded look that renders correctly in Gmail / Outlook / Apple Mail.
+  1897→  // mailto: links only support plain text, so this is what actually gets
+  1898→  // sent. The in-modal preview also shows an HTML version (buildEmailBodyHTML)
+  1899→  // for users who want to see what a fully-rendered email would look like.
+  1900→  function buildEmailBody(spec, rows, columns) {
+  1901→    var name = (spec && spec.name) || 'Pipeline Result';
+  1902→    var intro = (spec && spec.output && spec.output.emailBodyIntro) || '';
+  1903→    var generated = new Date().toLocaleString('en-CA', {
+  1904→      year: 'numeric', month: 'long', day: 'numeric',
+  1905→      hour: 'numeric', minute: '2-digit'
+  1906→    });
+  1907→    var docName = state.document ? state.document.name : '';
+  1908→    var docMeta = state.document
+  1909→      ? (state.document.type.toUpperCase() + ' \u00b7 ' + state.document.rowCount + ' rows \u00d7 ' + state.document.columnCount + ' cols')
+  1910→      : '';
+  1911→    var bar = '\u2550'.repeat(60);
+  1912→    var header = bar + '\n' +
+  1913→      '  INSIGHT ANALYTICS  \u00b7  PIPELINE RESULT\n' +
+  1914→      bar + '\n\n' +
+  1915→      'Pipeline:  ' + name + '\n' +
+  1916→      'Source:    ' + docName + (docMeta ? '  (' + docMeta + ')' : '') + '\n' +
+  1917→      'Generated: ' + generated + '\n\n' +
+  1918→      '\u2500'.repeat(60) + '\n' +
+  1919→      '  RESULT  \u00b7  ' + rows.length + ' rows \u00d7 ' + (columns.length || (rows[0] ? Object.keys(rows[0]).length : 0)) + ' columns\n' +
+  1920→      '\u2500'.repeat(60) + '\n';
+  1921→    if (intro) header += '\n' + intro + '\n';
+  1922→    if (!rows.length) return header + '\n(No rows in the result.)\n\n' + emailFooter();
+  1923→    var cols = columns.length ? columns : Object.keys(rows[0] || {});
+  1924→    var numericCols = cols.map(function (c) { return isNumericCol(rows, c); });
+  1925→    // Compute column widths (cap at 32 chars per cell).
+  1926→    var widths = cols.map(function (c) { return Math.max(3, String(c).length); });
+  1927→    var shown = rows.slice(0, 50);
+  1928→    shown.forEach(function (r) {
+  1929→      cols.forEach(function (c, i) {
+  1930→        var l = fmtVal(r[c]).length;
+  1931→        if (l > widths[i]) widths[i] = Math.min(32, l);
+  1932→      });
+  1933→    });
+  1934→    var pad = function (s, w, align) {
+  1935→      s = fmtVal(s);
+  1936→      if (s.length > w) return s.slice(0, w - 1) + '\u2026';
+  1937→      var pad = ' '.repeat(w - s.length);
+  1938→      return align === 'right' ? pad + s : s + pad;
+  1939→    };
+  1940→    var headerRow = '  ' + cols.map(function (c, i) { return pad(c, widths[i], numericCols[i] ? 'right' : 'left'); }).join('  \u2502  ');
+  1941→    var sepRow    = '  ' + cols.map(function (_, i) { return '\u2500'.repeat(widths[i]); }).join('  \u253c  ');
+  1942→    var lines = [header, headerRow, sepRow];
+  1943→    shown.forEach(function (r) {
+  1944→      lines.push('  ' + cols.map(function (c, i) { return pad(r[c], widths[i], numericCols[i] ? 'right' : 'left'); }).join('  \u2502  '));
+  1945→    });
+  1946→    if (rows.length > shown.length) lines.push('\n  ... ' + (rows.length - shown.length) + ' more rows not shown \u2014 download CSV/Excel for the full dataset.');
+  1947→    lines.push('');
+  1948→    lines.push(emailFooter());
+  1949→    return lines.join('\n');
+  1950→  }
+  1951→
+  1952→  function emailFooter() {
+  1953→    return '\u2500'.repeat(60) + '\n\n' +
+  1954→      'Insight Analytics  \u00b7  Live truth on every desk.\n' +
+  1955→      'https://insight-analytics.ca';
+  1956→  }
+  1957→
+  1958→  // ─── HTML email version (for in-modal preview + 'Download as HTML email') ──
+  1959→  // Full HTML with inline CSS so it renders in any email client that supports
+  1960→  // HTML. Branded gradient header bar, document metadata card, styled table
+  1961→  // with brand-colored header row + alternating row colors + right-aligned
+  1962→  // numerics, footer with tagline + URL.
+  1963→  function buildEmailBodyHTML(spec, rows, columns) {
+  1964→    var name = (spec && spec.name) || 'Pipeline Result';
+  1965→    var intro = (spec && spec.output && spec.output.emailBodyIntro) || '';
+  1966→    var generated = new Date().toLocaleString('en-CA', {
+  1967→      year: 'numeric', month: 'long', day: 'numeric',
+  1968→      hour: 'numeric', minute: '2-digit'
+  1969→    });
+  1970→    var docName = state.document ? esc(state.document.name) : '';
+  1971→    var docMeta = state.document
+  1972→      ? (state.document.type.toUpperCase() + ' &middot; ' + state.document.rowCount + ' rows &times; ' + state.document.columnCount + ' cols')
+  1973→      : '';
+  1974→    var cols = columns.length ? columns : (rows[0] ? Object.keys(rows[0]) : []);
+  1975→    var numericCols = cols.map(function (c) { return isNumericCol(rows, c); });
+  1976→    var shown = rows.slice(0, 50);
+  1977→    var headerCells = cols.map(function (c, i) {
+  1978→      return '<th style="padding:10px 14px;text-align:' + (numericCols[i] ? 'right' : 'left') + ';font-weight:700;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#fff;background:#4338ca;border-bottom:2px solid #0e7490;">' + esc(c) + '</th>';
+  1979→    }).join('');
+  1980→    var bodyRows = shown.map(function (r, idx) {
+  1981→      var bg = idx % 2 === 0 ? '#ffffff' : '#f1f5f9';
+  1982→      var cells = cols.map(function (c, i) {
+  1983→        var v = fmtVal(r[c]);
+  1984→        return '<td style="padding:8px 14px;text-align:' + (numericCols[i] ? 'right' : 'left') + ';font-size:13px;color:#0f172a;border-bottom:1px solid #e2e8f0;background:' + bg + ';">' + esc(v) + '</td>';
+  1985→      }).join('');
+  1986→      return '<tr>' + cells + '</tr>';
+  1987→    }).join('');
+  1988→    var moreNote = rows.length > shown.length
+  1989→      ? '<p style="margin:14px 0 0;color:#64748b;font-size:12px;font-style:italic;">... ' + (rows.length - shown.length) + ' more rows not shown &mdash; download CSV/Excel for the full dataset.</p>'
+  1990→      : '';
+  1991→    var introHTML = intro ? '<p style="margin:0 0 18px;color:#475569;font-size:14px;line-height:1.6;">' + esc(intro) + '</p>' : '';
+  1992→    return '' +
+  1993→      '<div style="font-family:Inter,Helvetica,Arial,sans-serif;max-width:680px;margin:0 auto;background:#f8fafc;padding:24px;">' +
+  1994→        // Branded header bar
+  1995→        '<div style="background:linear-gradient(135deg,#4338ca 0%,#0e7490 100%);padding:24px 28px;border-radius:12px 12px 0 0;">' +
+  1996→          '<div style="font-size:11px;font-weight:700;letter-spacing:0.16em;color:#cbd5e1;text-transform:uppercase;">INSIGHT ANALYTICS</div>' +
+  1997→          '<div style="font-size:22px;font-weight:700;color:#fff;margin-top:4px;">Pipeline Result</div>' +
+  1998→        '</div>' +
+  1999→        // Body
+  2000→        '<div style="background:#fff;padding:24px 28px;border:1px solid #e2e8f0;border-top:0;">' +
+
+[showing lines 1-2000 of 3018; use offset=2001 with limit to continue reading]

@@ -1,0 +1,2002 @@
+     1→/* ==================================================================
+     2→   Insight Analytics — Marketing Site Stylesheet
+     3→   Corporate Clean + Futuristic Overtones
+     4→   Light: white bg, navy primary, indigo→cyan gradient accents
+     5→   Dark: deep navy bg, glassmorphism cards
+     6→   ================================================================== */
+     7→
+     8→/* ------------------------------------------------------------------
+     9→   1. Design tokens (CSS variables) — light + dark
+    10→   ------------------------------------------------------------------ */
+    11→:root {
+    12→  /* Brand palette */
+    13→  --navy: #1e3a8a;
+    14→  --navy-deep: #0b1120;
+    15→  --indigo: #6366f1;
+    16→  --cyan: #06b6d4;
+    17→  --gradient: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+    18→  /* Aliases — these are the names other rules use (--primary / --accent).
+    19→     Without these aliases, var(--primary) and var(--accent) resolve to nothing
+    20→     (transparent), which made the active dashboard pill's gradient background
+    21→     disappear in light mode (white text on no background = invisible). */
+    22→  --primary: #6366f1;
+    23→  --accent: #06b6d4;
+    24→  --gradient-soft: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(6, 182, 212, 0.12));
+    25→
+    26→  /* Light theme defaults */
+    27→  --bg: #ffffff;
+    28→  --bg-alt: #f8fafc;
+    29→  --bg-elevated: #ffffff;
+    30→  --surface: #ffffff;
+    31→  --surface-2: #f8fafc;
+    32→  --border: #e2e8f0;
+    33→  --border-strong: #cbd5e1;
+    34→  --text: #0f172a;
+    35→  --text-muted: #475569;
+    36→  --text-soft: #64748b;
+    37→  --text-inverse: #ffffff;
+    38→  --navy-text: #1e3a8a;
+    39→  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    40→  --shadow-md: 0 10px 30px -10px rgba(15, 23, 42, 0.15);
+    41→  --shadow-lg: 0 24px 60px -20px rgba(30, 58, 138, 0.28);
+    42→  --shadow-glow: 0 0 0 1px rgba(99, 102, 241, 0.18), 0 18px 50px -18px rgba(99, 102, 241, 0.35);
+    43→  --glass-bg: rgba(255, 255, 255, 0.7);
+    44→  --glass-border: rgba(255, 255, 255, 0.6);
+    45→  --ring: 0 0 0 3px rgba(99, 102, 241, 0.35);
+    46→
+    47→  --radius-sm: 8px;
+    48→  --radius: 14px;
+    49→  --radius-lg: 22px;
+    50→  --radius-xl: 30px;
+    51→
+    52→  --container: 1200px;
+    53→  --nav-h: 72px;
+    54→
+    55→  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    56→  --font-head: "Space Grotesk", "Inter", system-ui, sans-serif;
+    57→
+    58→  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    59→  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+    60→}
+    61→
+    62→[data-theme="dark"] {
+    63→  --bg: #0b1120;
+    64→  --bg-alt: #0f172a;
+    65→  --bg-elevated: #111a2e;
+    66→  --surface: rgba(255, 255, 255, 0.04);
+    67→  --surface-2: rgba(255, 255, 255, 0.06);
+    68→  --border: rgba(255, 255, 255, 0.1);
+    69→  --border-strong: rgba(255, 255, 255, 0.18);
+    70→  --text: #e6edf7;
+    71→  --text-muted: #a8b3c7;
+    72→  --text-soft: #8b97ab;
+    73→  --text-inverse: #0b1120;
+    74→  --navy-text: #93b4ff;
+    75→  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    76→  --shadow-md: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+    77→  --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, 0.75);
+    78→  --shadow-glow: 0 0 0 1px rgba(99, 102, 241, 0.25), 0 18px 50px -18px rgba(99, 102, 241, 0.45);
+    79→  --glass-bg: rgba(255, 255, 255, 0.05);
+    80→  --glass-border: rgba(255, 255, 255, 0.12);
+    81→  --ring: 0 0 0 3px rgba(99, 102, 241, 0.45);
+    82→}
+    83→
+    84→/* ------------------------------------------------------------------
+    85→   2. Reset & base
+    86→   ------------------------------------------------------------------ */
+    87→*,
+    88→*::before,
+    89→*::after {
+    90→  box-sizing: border-box;
+    91→}
+    92→
+    93→html {
+    94→  scroll-behavior: smooth;
+    95→  /* Snap to section starts on Page Down / wheel / touch.
+    96→     Using 'mandatory' so the browser always snaps to the nearest section
+    97→     start after any scroll gesture — proximity was too weak for tall sections
+    98→     (dashboard iframe, methodology grid) where Page Down lands mid-section. */
+    99→  scroll-snap-type: y mandatory;
+   100→  -webkit-text-size-adjust: 100%;
+   101→}
+   102→
+   103→body {
+   104→  margin: 0;
+   105→  font-family: var(--font-body);
+   106→  background-color: var(--bg);
+   107→  color: var(--text);
+   108→  line-height: 1.65;
+   109→  font-size: 17px;
+   110→  -webkit-font-smoothing: antialiased;
+   111→  -moz-osx-font-smoothing: grayscale;
+   112→  overflow-x: hidden;
+   113→  transition: background-color 0.4s var(--ease), color 0.4s var(--ease);
+   114→}
+   115→
+   116→img {
+   117→  max-width: 100%;
+   118→  display: block;
+   119→}
+   120→
+   121→a {
+   122→  color: var(--navy-text);
+   123→  text-decoration: none;
+   124→  transition: color 0.2s var(--ease-soft);
+   125→}
+   126→
+   127→a:hover {
+   128→  color: var(--indigo);
+   129→}
+   130→
+   131→button {
+   132→  font-family: inherit;
+   133→  cursor: pointer;
+   134→}
+   135→
+   136→h1, h2, h3, h4, h5, h6 {
+   137→  font-family: var(--font-head);
+   138→  line-height: 1.15;
+   139→  letter-spacing: -0.02em;
+   140→  color: var(--text);
+   141→  margin: 0 0 0.5em;
+   142→  font-weight: 700;
+   143→}
+   144→
+   145→p {
+   146→  margin: 0 0 1rem;
+   147→}
+   148→
+   149→ul {
+   150→  margin: 0;
+   151→  padding: 0;
+   152→}
+   153→
+   154→:focus-visible {
+   155→  outline: none;
+   156→  box-shadow: var(--ring);
+   157→  border-radius: 6px;
+   158→}
+   159→
+   160→::selection {
+   161→  background: rgba(99, 102, 241, 0.28);
+   162→  color: var(--text);
+   163→}
+   164→
+   165→/* Custom scrollbar */
+   166→::-webkit-scrollbar {
+   167→  width: 11px;
+   168→  height: 11px;
+   169→}
+   170→::-webkit-scrollbar-track {
+   171→  background: transparent;
+   172→}
+   173→::-webkit-scrollbar-thumb {
+   174→  background: linear-gradient(var(--indigo), var(--cyan));
+   175→  border-radius: 99px;
+   176→  border: 3px solid var(--bg);
+   177→}
+   178→* {
+   179→  scrollbar-color: var(--indigo) transparent;
+   180→  scrollbar-width: thin;
+   181→}
+   182→
+   183→/* ------------------------------------------------------------------
+   184→   3. Layout helpers
+   185→   ------------------------------------------------------------------ */
+   186→.container {
+   187→  width: 100%;
+   188→  max-width: var(--container);
+   189→  margin: 0 auto;
+   190→  padding: 0 24px;
+   191→}
+   192→
+   193→.section {
+   194→  padding: 96px 0;
+   195→  position: relative;
+   196→  /* Snap each major section's top to the viewport when the user pages down /
+   197→     scrolls near a section boundary. scroll-margin-top offsets the fixed
+   198→     navbar so the section title isn't hidden behind it. */
+   199→  scroll-snap-align: start;
+   200→  scroll-margin-top: var(--nav-h);
+   201→}
+   202→.section-sm {
+   203→  padding: 72px 0;
+   204→}
+   205→
+   206→.section-head {
+   207→  max-width: 760px;
+   208→  margin: 0 auto 56px;
+   209→  text-align: center;
+   210→}
+   211→
+   212→.eyebrow {
+   213→  display: inline-flex;
+   214→  align-items: center;
+   215→  gap: 8px;
+   216→  font-family: var(--font-head);
+   217→  font-size: 0.78rem;
+   218→  font-weight: 700;
+   219→  letter-spacing: 0.16em;
+   220→  text-transform: uppercase;
+   221→  color: var(--indigo);
+   222→  padding: 7px 14px;
+   223→  border-radius: 999px;
+   224→  background: var(--gradient-soft);
+   225→  border: 1px solid rgba(99, 102, 241, 0.22);
+   226→  margin-bottom: 22px;
+   227→}
+   228→
+   229→.eyebrow .dot {
+   230→  width: 7px;
+   231→  height: 7px;
+   232→  border-radius: 50%;
+   233→  background: var(--gradient);
+   234→  box-shadow: 0 0 10px rgba(99, 102, 241, 0.7);
+   235→}
+   236→
+   237→.section-title {
+   238→  font-size: clamp(1.9rem, 4vw, 2.85rem);
+   239→  font-weight: 800;
+   240→  margin-bottom: 18px;
+   241→}
+   242→.section-title .grad {
+   243→  background: var(--gradient);
+   244→  -webkit-background-clip: text;
+   245→  background-clip: text;
+   246→  -webkit-text-fill-color: transparent;
+   247→  color: transparent;
+   248→}
+   249→
+   250→.section-sub {
+   251→  font-size: 1.08rem;
+   252→  color: var(--text-muted);
+   253→  max-width: 640px;
+   254→  margin: 0 auto;
+   255→}
+   256→
+   257→.text-center { text-align: center; }
+   258→
+   259→/* ------------------------------------------------------------------
+   260→   4. Buttons
+   261→   ------------------------------------------------------------------ */
+   262→.btn {
+   263→  display: inline-flex;
+   264→  align-items: center;
+   265→  justify-content: center;
+   266→  gap: 10px;
+   267→  font-family: var(--font-head);
+   268→  font-weight: 600;
+   269→  font-size: 0.98rem;
+   270→  letter-spacing: 0.01em;
+   271→  padding: 14px 26px;
+   272→  border-radius: 999px;
+   273→  border: 1px solid transparent;
+   274→  transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease), background 0.3s var(--ease), color 0.3s var(--ease);
+   275→  text-decoration: none;
+   276→  position: relative;
+   277→  overflow: hidden;
+   278→  min-height: 48px;
+   279→}
+   280→
+   281→.btn .fas,
+   282→.btn .far {
+   283→  font-size: 0.9em;
+   284→  /* Ensure icon + label render ABOVE the .btn-primary::after shine sweep
+   285→     (which has position: absolute + inset: 0 — without this, the shine
+   286→     pseudo renders on top of the content and dims the text by ~35%
+   287→     even at rest). */
+   288→  position: relative;
+   289→  z-index: 1;
+   290→}
+   291→.btn .btn-text {
+   292→  position: relative;
+   293→  z-index: 1;
+   294→}
+   295→
+   296→.btn-primary {
+   297→  /* Darker gradient stops than the brand --gradient — cyan #06b6d4 has only
+   298→     ~2.3:1 contrast with white text (fails WCAG AA), which made the
+   299→     right half of every "Book a Working Session" / "Book a Demo" pill
+   300→     read as washed-out. Indigo-700 (#4338ca) → cyan-700 (#0e7490)
+   301→     gives ~8.5:1 / ~3.9:1 — comfortable contrast across the whole pill. */
+   302→  background: linear-gradient(135deg, #4338ca 0%, #0e7490 100%);
+   303→  background-size: 160% 160%;
+   304→  color: #fff;
+   305→  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+   306→  box-shadow: 0 12px 30px -10px rgba(67, 56, 202, 0.65);
+   307→}
+   308→.btn-primary:hover {
+   309→  transform: translateY(-3px);
+   310→  box-shadow: 0 20px 40px -12px rgba(67, 56, 202, 0.80);
+   311→  background-position: 100% 50%;
+   312→  color: #fff;
+   313→}
+   314→.btn-primary::after {
+   315→  content: "";
+   316→  position: absolute;
+   317→  inset: 0;
+   318→  background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.35) 50%, transparent 70%);
+   319→  transform: translateX(-120%);
+   320→  transition: transform 0.7s var(--ease);
+   321→  /* Shine sweep stays behind the icon + label (z-index: 1 above) so even
+   322→     during the hover sweep animation the text never gets dimmed by it. */
+   323→  z-index: 0;
+   324→  pointer-events: none;
+   325→}
+   326→.btn-primary:hover::after {
+   327→  transform: translateX(120%);
+   328→}
+   329→
+   330→.btn-ghost {
+   331→  background: transparent;
+   332→  color: var(--text);
+   333→  border-color: var(--border-strong);
+   334→  backdrop-filter: blur(8px);
+   335→}
+   336→.btn-ghost:hover {
+   337→  transform: translateY(-3px);
+   338→  border-color: var(--indigo);
+   339→  color: var(--indigo);
+   340→  box-shadow: 0 14px 30px -16px rgba(99, 102, 241, 0.6);
+   341→}
+   342→
+   343→.btn-light {
+   344→  background: var(--surface);
+   345→  color: var(--navy-text);
+   346→  border-color: var(--border);
+   347→  box-shadow: var(--shadow-sm);
+   348→}
+   349→.btn-light:hover {
+   350→  transform: translateY(-3px);
+   351→  border-color: var(--indigo);
+   352→  color: var(--indigo);
+   353→  box-shadow: var(--shadow-md);
+   354→}
+   355→
+   356→.btn-lg {
+   357→  padding: 16px 32px;
+   358→  font-size: 1.05rem;
+   359→}
+   360→
+   361→.btn.is-loading {
+   362→  pointer-events: none;
+   363→  opacity: 0.85;
+   364→}
+   365→.btn.is-loading .btn-text {
+   366→  visibility: hidden;
+   367→}
+   368→.btn.is-loading::before {
+   369→  content: "";
+   370→  position: absolute;
+   371→  width: 18px;
+   372→  height: 18px;
+   373→  top: 50%;
+   374→  left: 50%;
+   375→  margin: -9px 0 0 -9px;
+   376→  border: 2px solid rgba(255,255,255,0.4);
+   377→  border-top-color: #fff;
+   378→  border-radius: 50%;
+   379→  animation: spin 0.7s linear infinite;
+   380→}
+   381→@keyframes spin { to { transform: rotate(360deg); } }
+   382→
+   383→/* ------------------------------------------------------------------
+   384→   5. Navbar
+   385→   ------------------------------------------------------------------ */
+   386→.navbar {
+   387→  position: fixed;
+   388→  top: 0;
+   389→  left: 0;
+   390→  right: 0;
+   391→  /* PWA on iPhone X+: status bar overlays content with black-translucent meta.
+   392→     Add safe-area-inset-top padding so the navbar's CONTENT sits below the
+   393→     notch + status bar. The navbar's visual background still extends to top: 0
+   394→     for an immersive look. */
+   395→  height: calc(var(--nav-h) + env(safe-area-inset-top, 0px));
+   396→  padding-top: env(safe-area-inset-top, 0px);
+   397→  z-index: 100;
+   398→  display: flex;
+   399→  align-items: center;
+   400→  background: color-mix(in srgb, var(--bg) 78%, transparent);
+   401→  backdrop-filter: blur(18px) saturate(140%);
+   402→  -webkit-backdrop-filter: blur(18px) saturate(140%);
+   403→  border-bottom: 1px solid transparent;
+   404→  transition: background 0.35s var(--ease), border-color 0.35s var(--ease), box-shadow 0.35s var(--ease), height 0.35s var(--ease);
+   405→}
+   406→.navbar.is-scrolled {
+   407→  height: calc(64px + env(safe-area-inset-top, 0px));
+   408→  border-bottom-color: var(--border);
+   409→  box-shadow: 0 8px 30px -18px rgba(15, 23, 42, 0.25);
+   410→  background: color-mix(in srgb, var(--bg) 92%, transparent);
+   411→}
+   412→
+   413→.nav-inner {
+   414→  width: 100%;
+   415→  max-width: var(--container);
+   416→  margin: 0 auto;
+   417→  padding: 0 24px;
+   418→  display: flex;
+   419→  align-items: center;
+   420→  gap: 24px;
+   421→}
+   422→
+   423→.brand {
+   424→  display: flex;
+   425→  align-items: center;
+   426→  gap: 12px;
+   427→  color: var(--text);
+   428→  font-weight: 700;
+   429→}
+   430→.brand:hover { color: var(--text); }
+   431→
+   432→.brand-mark {
+   433→  width: 28px;
+   434→  height: 28px;
+   435→  display: grid;
+   436→  place-items: center;
+   437→  flex-shrink: 0;
+   438→}
+   439→.brand-mark svg {
+   440→  width: 100%;
+   441→  height: 100%;
+   442→  
+   443→}
+   444→
+   445→.brand-name {
+   446→  font-family: var(--font-head);
+   447→  font-size: 1.12rem;
+   448→  letter-spacing: -0.01em;
+   449→  white-space: nowrap;
+   450→}
+   451→.brand-name b { color: #00d4ff; font-weight: 800; }
+   452→
+   453→.nav-links {
+   454→  display: flex;
+   455→  align-items: center;
+   456→  gap: 6px;
+   457→  margin-left: auto;
+   458→}
+   459→.nav-link {
+   460→  font-family: var(--font-head);
+   461→  font-weight: 500;
+   462→  font-size: 0.94rem;
+   463→  color: var(--text-muted);
+   464→  padding: 9px 14px;
+   465→  border-radius: 8px;
+   466→  position: relative;
+   467→  transition: color 0.2s var(--ease-soft), background 0.2s var(--ease-soft);
+   468→}
+   469→.nav-link:hover {
+   470→  color: var(--text);
+   471→  background: var(--surface-2);
+   472→}
+   473→.nav-link.is-active {
+   474→  color: var(--indigo);
+   475→}
+   476→.nav-link.is-active::after {
+   477→  content: "";
+   478→  position: absolute;
+   479→  left: 14px;
+   480→  right: 14px;
+   481→  bottom: 4px;
+   482→  height: 2px;
+   483→  background: var(--gradient);
+   484→  border-radius: 2px;
+   485→}
+   486→
+   487→.nav-actions {
+   488→  display: flex;
+   489→  align-items: center;
+   490→  gap: 14px;
+   491→  margin-left: 12px;
+   492→}
+   493→
+   494→/* (nav-pill rules removed — Platform-Agnostic + Agile now live as .meta-link inside .hero-meta) */
+   495→
+   496→.theme-toggle {
+   497→  width: 28px;
+   498→  height: 28px;
+   499→  border-radius: 50%;
+   500→  border: 1px solid var(--border-strong);
+   501→  background: var(--surface-2);
+   502→  color: var(--text);
+   503→  display: grid;
+   504→  place-items: center;
+   505→  font-size: 0.85rem;
+   506→  transition: transform 0.4s var(--ease), background 0.2s var(--ease-soft), border-color 0.2s var(--ease-soft), color 0.2s var(--ease-soft);
+   507→}
+   508→.theme-toggle:hover {
+   509→  transform: rotate(20deg) scale(1.05);
+   510→  color: var(--indigo);
+   511→  border-color: var(--indigo);
+   512→}
+   513→
+   514→.nav-cta {
+   515→  padding: 4px 9px;
+   516→  font-size: 0.68rem;
+   517→  height: 22px;
+   518→  min-height: 22px;
+   519→  gap: 4px;
+   520→  letter-spacing: 0.03em;
+   521→  display: inline-flex;
+   522→  align-items: center;
+   523→  border-radius: 999px;
+   524→  font-weight: 600;
+   525→  /* Visually subordinate to other nav controls — smaller, tighter, less glow */
+   526→  box-shadow: 0 4px 14px -8px rgba(99, 102, 241, 0.55);
+   527→}
+   528→.nav-cta .fas { font-size: 0.62rem; }
+   529→
+   530→/* On narrower viewports, drop the calendar icon so the pill stays compact
+   531→   and never crowds the theme toggle / Ask AI button / hamburger. */
+   532→@media (max-width: 1180px) {
+   533→  .nav-cta .fas { display: none; }
+   534→  .nav-cta { padding: 4px 10px; }
+   535→}
+   536→
+   537→.menu-toggle {
+   538→  display: none;
+   539→  width: 32px;
+   540→  height: 32px;
+   541→  border-radius: 8px;
+   542→  border: none;
+   543→  background: transparent;
+   544→  color: var(--text);
+   545→  align-items: center;
+   546→  justify-content: center;
+   547→  cursor: pointer;
+   548→  transition: opacity 180ms ease;
+   549→  flex-shrink: 0;
+   550→  opacity: 0.5;
+   551→}
+   552→.menu-toggle:hover {
+   553→  opacity: 1;
+   554→}
+   555→/* CSS-only hamburger — sleek 3-bar icon, no Font Awesome. */
+   556→.menu-toggle-bars {
+   557→  position: relative;
+   558→  width: 16px;
+   559→  height: 10px;
+   560→  display: block;
+   561→}
+   562→.menu-toggle-bars::before,
+   563→.menu-toggle-bars::after,
+   564→.menu-toggle-bars > span {
+   565→  content: '';
+   566→  position: absolute;
+   567→  left: 0;
+   568→  width: 100%;
+   569→  height: 1.5px;
+   570→  background: currentColor;
+   571→  border-radius: 1px;
+   572→  transition: transform 250ms var(--ease), opacity 200ms ease, top 250ms var(--ease);
+   573→}
+   574→.menu-toggle-bars::before { top: 0; }
+   575→.menu-toggle-bars > span  { top: 4px; }
+   576→.menu-toggle-bars::after  { top: 8px; }
+   577→.menu-toggle.is-open .menu-toggle-bars::before { top: 4px; transform: rotate(45deg); }
+   578→.menu-toggle.is-open .menu-toggle-bars::after  { top: 4px; transform: rotate(-45deg); }
+   579→.menu-toggle.is-open .menu-toggle-bars span    { opacity: 0; }
+   580→
+   581→.mobile-menu {
+   582→  position: fixed;
+   583→  /* Position below the navbar (which now includes safe-area-inset-top on iPhone X+) */
+   584→  top: calc(var(--nav-h) + env(safe-area-inset-top, 0px));
+   585→  left: 0;
+   586→  right: 0;
+   587→  background: var(--bg);
+   588→  backdrop-filter: blur(20px);
+   589→  border-bottom: 1px solid var(--border);
+   590→  padding: 16px 24px 24px;
+   591→  transform: translateY(-12px);
+   592→  opacity: 0;
+   593→  visibility: hidden;
+   594→  transition: transform 0.3s var(--ease), opacity 0.3s var(--ease), visibility 0.3s var(--ease);
+   595→  z-index: 99;
+   596→}
+   597→.mobile-menu.is-open {
+   598→  transform: translateY(0);
+   599→  opacity: 1;
+   600→  visibility: visible;
+   601→}
+   602→.mobile-menu .nav-link {
+   603→  display: block;
+   604→  padding: 14px 12px;
+   605→  font-size: 1.05rem;
+   606→  border-radius: 10px;
+   607→  border-bottom: 1px solid var(--border);
+   608→}
+   609→.mobile-menu .nav-link:last-of-type { border-bottom: 0; }
+   610→.mobile-menu .btn { width: 100%; margin-top: 14px; }
+   611→
+   612→/* ------------------------------------------------------------------
+   613→   6. Hero
+   614→   ------------------------------------------------------------------ */
+   615→.hero {
+   616→  position: relative;
+   617→  min-height: 100vh;
+   618→  display: flex;
+   619→  align-items: center;
+   620→  padding: calc(var(--nav-h) + 40px) 0 60px;
+   621→  overflow: hidden;
+   622→  /* Snap target — Page Up from any lower section snaps back to hero top */
+   623→  scroll-snap-align: start;
+   624→  scroll-margin-top: 0;
+   625→  background:
+   626→    radial-gradient(900px 500px at 78% 12%, rgba(99, 102, 241, 0.16), transparent 60%),
+   627→    radial-gradient(700px 500px at 12% 88%, rgba(6, 182, 212, 0.14), transparent 60%),
+   628→    var(--bg);
+   629→}
+   630→[data-theme="dark"] .hero {
+   631→  background:
+   632→    radial-gradient(900px 500px at 78% 12%, rgba(99, 102, 241, 0.2), transparent 60%),
+   633→    radial-gradient(700px 500px at 12% 88%, rgba(6, 182, 212, 0.16), transparent 60%),
+   634→    var(--bg);
+   635→}
+   636→
+   637→#hero-canvas {
+   638→  position: absolute;
+   639→  inset: 0;
+   640→  width: 100%;
+   641→  height: 100%;
+   642→  z-index: 0;
+   643→  pointer-events: none;
+   644→}
+   645→
+   646→.hero-inner {
+   647→  position: relative;
+   648→  z-index: 2;
+   649→  max-width: 900px;
+   650→}
+   651→
+   652→.hero h1 {
+   653→  font-size: clamp(2.4rem, 6vw, 4.4rem);
+   654→  font-weight: 800;
+   655→  letter-spacing: -0.03em;
+   656→  line-height: 1.05;
+   657→  margin-bottom: 24px;
+   658→}
+   659→.hero h1 .grad {
+   660→  background: var(--gradient);
+   661→  -webkit-background-clip: text;
+   662→  background-clip: text;
+   663→  -webkit-text-fill-color: transparent;
+   664→  color: transparent;
+   665→}
+   666→
+   667→.hero-sub {
+   668→  font-size: clamp(1.05rem, 1.4vw, 1.25rem);
+   669→  color: var(--text-muted);
+   670→  max-width: 740px;
+   671→  margin-bottom: 36px;
+   672→  line-height: 1.7;
+   673→}
+   674→
+   675→/* .hero-cta: dual CTA row inside the hero, between hero-sub and hero-meta.
+   676→   Primary (gradient pill) jumps to the live dashboard; ghost variant
+   677→   scrolls to the 8-step methodology. */
+   678→.hero-cta {
+   679→  display: flex;
+   680→  flex-wrap: wrap;
+   681→  align-items: center;
+   682→  gap: 14px;
+   683→  margin-top: 8px;
+   684→  margin-bottom: 28px;
+   685→}
+   686→.hero-cta .btn { min-height: 42px; padding: 11px 22px; font-size: 0.92rem; }
+   687→.hero-cta .btn .fas { font-size: 0.85rem; }
+   688→@media (max-width: 640px) {
+   689→  .hero-cta { gap: 10px; }
+   690→  .hero-cta .btn { flex: 1 1 100%; min-height: 40px; padding: 10px 16px; }
+   691→}
+   692→.hero-meta {
+   693→  display: flex;
+   694→  flex-wrap: wrap;
+   695→  gap: 32px;
+   696→  align-items: center;
+   697→}
+   698→.hero-meta .meta-item {
+   699→  display: flex;
+   700→  flex-direction: column;
+   701→  gap: 2px;
+   702→}
+   703→.hero-meta .meta-num {
+   704→  font-family: var(--font-head);
+   705→  font-size: 1.7rem;
+   706→  font-weight: 800;
+   707→  color: var(--text);
+   708→  line-height: 1;
+   709→}
+   710→.hero-meta .meta-num .grad {
+   711→  background: var(--gradient);
+   712→  -webkit-background-clip: text;
+   713→  background-clip: text;
+   714→  -webkit-text-fill-color: transparent;
+   715→}
+   716→.hero-meta .meta-label {
+   717→  font-size: 0.82rem;
+   718→  color: var(--text-soft);
+   719→  text-transform: uppercase;
+   720→  letter-spacing: 0.08em;
+   721→}
+   722→.hero-meta .meta-divider {
+   723→  width: 1px;
+   724→  height: 28px;
+   725→  background: var(--border-strong);
+   726→}
+   727→
+   728→/* Clickable meta items (Platform-Agnostic, Agile) — same format as the stat tiles, just links */
+   729→.hero-meta .meta-link {
+   730→  text-decoration: none;
+   731→  color: inherit;
+   732→  display: flex;
+   733→  flex-direction: column;
+   734→  gap: 2px;
+   735→  padding: 4px 6px;
+   736→  margin: -4px -6px;
+   737→  border-radius: 8px;
+   738→  transition: background 180ms ease, transform 180ms ease;
+   739→}
+   740→.hero-meta .meta-link:hover {
+   741→  background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(6,182,212,0.04));
+   742→  transform: translateY(-2px);
+   743→}
+   744→.hero-meta .meta-link:hover .meta-label {
+   745→  color: var(--text);
+   746→}
+   747→.hero-meta .meta-link.is-active .meta-label,
+   748→.hero-meta .meta-link.is-active .meta-num {
+   749→  color: var(--text);
+   750→}
+   751→.hero-meta .meta-link.is-active {
+   752→  background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(6,182,212,0.05));
+   753→}
+   754→/* Icon-sized equivalent of the gradient .grad text treatment */
+   755→.hero-meta .grad-icon {
+   756→  background: var(--gradient);
+   757→  -webkit-background-clip: text;
+   758→  background-clip: text;
+   759→  -webkit-text-fill-color: transparent;
+   760→  color: transparent;
+   761→  font-size: 1.5rem;
+   762→  line-height: 1;
+   763→}
+   764→
+   765→/* Scroll-down indicator */
+   766→.scroll-indicator {
+   767→  position: absolute;
+   768→  left: 50%;
+   769→  bottom: 26px;
+   770→  transform: translateX(-50%);
+   771→  z-index: 3;
+   772→  display: flex;
+   773→  flex-direction: column;
+   774→  align-items: center;
+   775→  gap: 8px;
+   776→  color: var(--text-soft);
+   777→  font-size: 0.78rem;
+   778→  letter-spacing: 0.16em;
+   779→  text-transform: uppercase;
+   780→  font-weight: 600;
+   781→}
+   782→.scroll-mouse {
+   783→  width: 26px;
+   784→  height: 42px;
+   785→  border: 2px solid var(--border-strong);
+   786→  border-radius: 14px;
+   787→  display: flex;
+   788→  justify-content: center;
+   789→  padding-top: 7px;
+   790→}
+   791→.scroll-mouse::before {
+   792→  content: "";
+   793→  width: 4px;
+   794→  height: 8px;
+   795→  border-radius: 4px;
+   796→  background: var(--gradient);
+   797→  animation: scrolldot 1.8s var(--ease) infinite;
+   798→}
+   799→@keyframes scrolldot {
+   800→  0% { opacity: 0; transform: translateY(-4px); }
+   801→  40% { opacity: 1; }
+   802→  100% { opacity: 0; transform: translateY(14px); }
+   803→}
+   804→
+   805→/* ------------------------------------------------------------------
+   806→   7. Glass card base
+   807→   ------------------------------------------------------------------ */
+   808→.glass {
+   809→  background: var(--glass-bg);
+   810→  backdrop-filter: blur(16px) saturate(150%);
+   811→  -webkit-backdrop-filter: blur(16px) saturate(150%);
+   812→  border: 1px solid var(--glass-border);
+   813→  border-radius: var(--radius-lg);
+   814→  box-shadow: var(--shadow-md);
+   815→}
+   816→.card {
+   817→  background: var(--surface);
+   818→  border: 1px solid var(--border);
+   819→  border-radius: var(--radius-lg);
+   820→  padding: 30px;
+   821→  box-shadow: var(--shadow-sm);
+   822→  transition: transform 0.4s var(--ease), box-shadow 0.4s var(--ease), border-color 0.4s var(--ease);
+   823→  position: relative;
+   824→  overflow: hidden;
+   825→  height: 100%;
+   826→}
+   827→.card:hover {
+   828→  transform: translateY(-8px);
+   829→  box-shadow: var(--shadow-lg);
+   830→  border-color: rgba(99, 102, 241, 0.4);
+   831→}
+   832→.card::before {
+   833→  content: "";
+   834→  position: absolute;
+   835→  top: 0;
+   836→  left: 0;
+   837→  right: 0;
+   838→  height: 3px;
+   839→  background: var(--gradient);
+   840→  opacity: 0;
+   841→  transition: opacity 0.4s var(--ease);
+   842→}
+   843→.card:hover::before { opacity: 1; }
+   844→
+   845→/* ------------------------------------------------------------------
+   846→   8. Problem section
+   847→   ------------------------------------------------------------------ */
+   848→#problem {
+   849→  background: var(--bg-alt);
+   850→}
+   851→.problem-grid {
+   852→  display: grid;
+   853→  grid-template-columns: repeat(3, 1fr);
+   854→  gap: 24px;
+   855→}
+   856→.problem-card {
+   857→  text-align: left;
+   858→}
+   859→.problem-icon {
+   860→  /* Unified with .org-icon: same 48×48px, same border-radius, same font-size,
+   861→     same solid-gradient + white-icon treatment. Different hue per section. */
+   862→  width: 48px;
+   863→  height: 48px;
+   864→  border-radius: 14px;
+   865→  display: grid;
+   866→  place-items: center;
+   867→  font-size: 1.15rem;
+   868→  /* Indigo → cyan brand gradient (cool blue family) */
+   869→  background: linear-gradient(135deg, var(--indigo), var(--cyan));
+   870→  color: #fff;
+   871→  border: 0;
+   872→  margin-bottom: 20px;
+   873→  box-shadow: 0 6px 16px -8px rgba(99, 102, 241, 0.45);
+   874→}
+   875→.problem-card h3 {
+   876→  font-size: 1.28rem;
+   877→  font-weight: 700;
+   878→  margin-bottom: 12px;
+   879→}
+   880→.problem-card p {
+   881→  color: var(--text-muted);
+   882→  font-size: 0.98rem;
+   883→  line-height: 1.7;
+   884→  margin: 0;
+   885→}
+   886→
+   887→/* Inline research-stats band beneath the problem cards. Highlights the
+   888→   McKinsey decision-velocity argument as the "so what" of the section. */
+   889→.problem-stats {
+   890→  margin-top: 36px;
+   891→  padding: 28px 32px;
+   892→  border-radius: 18px;
+   893→  background: linear-gradient(135deg, rgba(99,102,241,0.07), rgba(6,182,212,0.04));
+   894→  border: 1px solid var(--border);
+   895→  position: relative;
+   896→  overflow: hidden;
+   897→}
+   898→.problem-stats::before {
+   899→  content: "";
+   900→  position: absolute;
+   901→  inset: 0;
+   902→  background: radial-gradient(circle at 0% 0%, rgba(99,102,241,0.08), transparent 50%);
+   903→  pointer-events: none;
+   904→}
+   905→.problem-stats-lead {
+   906→  position: relative;
+   907→  max-width: 880px;
+   908→}
+   909→.problem-stats-lead h3 {
+   910→  font-family: var(--font-head);
+   911→  font-size: clamp(1.2rem, 2vw, 1.55rem);
+   912→  font-weight: 700;
+   913→  margin-bottom: 12px;
+   914→  color: var(--text);
+   915→}
+   916→.problem-stats-lead p {
+   917→  color: var(--text-muted);
+   918→  font-size: 1.02rem;
+   919→  line-height: 1.75;
+   920→  margin: 0;
+   921→}
+   922→.problem-stats-lead strong {
+   923→  color: var(--text);
+   924→  background: linear-gradient(135deg, var(--indigo), var(--cyan));
+   925→  -webkit-background-clip: text;
+   926→  background-clip: text;
+   927→  -webkit-text-fill-color: transparent;
+   928→  font-weight: 700;
+   929→}
+   930→
+   931→/* Tail line beneath the stats band — single-sentence punchline */
+   932→.section-tail {
+   933→  margin-top: 28px;
+   934→  text-align: center;
+   935→  font-family: var(--font-head);
+   936→  font-size: 1.1rem;
+   937→  font-weight: 600;
+   938→  color: var(--text-soft);
+   939→  font-style: italic;
+   940→}
+   941→@media (max-width: 768px) {
+   942→  .problem-stats { padding: 22px 20px; margin-top: 24px; }
+   943→  .section-tail { font-size: 1rem; }
+   944→}
+   945→
+   946→/* ------------------------------------------------------------------
+   947→   9a. What We Do — three moves cards
+   948→   ------------------------------------------------------------------ */
+   949→.what-grid {
+   950→  display: grid;
+   951→  grid-template-columns: repeat(3, 1fr);
+   952→  gap: 24px;
+   953→}
+   954→.what-card {
+   955→  position: relative;
+   956→  padding: 32px 28px 24px;
+   957→  display: flex;
+   958→  flex-direction: column;
+   959→  gap: 14px;
+   960→  overflow: hidden;
+   961→}
+   962→.what-card .what-step {
+   963→  position: absolute;
+   964→  top: 18px;
+   965→  right: 22px;
+   966→  font-family: var(--font-head);
+   967→  font-size: 0.85rem;
+   968→  font-weight: 800;
+   969→  letter-spacing: 0.1em;
+   970→  color: var(--text-soft);
+   971→  opacity: 0.7;
+   972→}
+   973→.what-card .what-icon {
+   974→  width: 44px;
+   975→  height: 44px;
+   976→  border-radius: 12px;
+   977→  display: grid;
+   978→  place-items: center;
+   979→  font-size: 1.05rem;
+   980→  background: linear-gradient(135deg, var(--indigo), var(--cyan));
+   981→  color: #fff;
+   982→  box-shadow: 0 6px 14px -8px rgba(99, 102, 241, 0.45);
+   983→  margin-bottom: 4px;
+   984→}
+   985→.what-card h3 {
+   986→  font-family: var(--font-head);
+   987→  font-size: 1.22rem;
+   988→  font-weight: 700;
+   989→  line-height: 1.3;
+   990→  margin: 0 0 4px;
+   991→  color: var(--text);
+   992→}
+   993→.what-card p {
+   994→  margin: 0;
+   995→  font-size: 0.94rem;
+   996→  line-height: 1.7;
+   997→  color: var(--text-muted);
+   998→}
+   999→.what-card p strong {
+  1000→  color: var(--text);
+  1001→  font-weight: 700;
+  1002→}
+  1003→.what-card .what-pain strong    { color: #f43f5e; }
+  1004→.what-card .what-do strong      { color: var(--indigo); }
+  1005→.what-card .what-outcome strong { color: var(--cyan); }
+  1006→
+  1007→.what-concept {
+  1008→  margin-top: auto;
+  1009→  padding-top: 18px;
+  1010→  display: flex;
+  1011→  flex-direction: column;
+  1012→  gap: 2px;
+  1013→  text-decoration: none;
+  1014→  border-top: 1px dashed var(--border);
+  1015→  margin-top: 18px;
+  1016→  padding-top: 16px;
+  1017→  transition: all 200ms ease;
+  1018→}
+  1019→.what-concept:hover { padding-left: 4px; }
+  1020→.what-concept-label {
+  1021→  font-size: 0.68rem;
+  1022→  font-weight: 700;
+  1023→  letter-spacing: 0.14em;
+  1024→  text-transform: uppercase;
+  1025→  color: var(--text-soft);
+  1026→}
+  1027→.what-concept-name {
+  1028→  font-family: var(--font-head);
+  1029→  font-size: 0.98rem;
+  1030→  font-weight: 700;
+  1031→  background: linear-gradient(135deg, var(--indigo), var(--cyan));
+  1032→  -webkit-background-clip: text;
+  1033→  background-clip: text;
+  1034→  -webkit-text-fill-color: transparent;
+  1035→  color: transparent;
+  1036→}
+  1037→@media (max-width: 980px) {
+  1038→  .what-grid { grid-template-columns: 1fr; }
+  1039→}
+  1040→
+  1041→/* ------------------------------------------------------------------
+  1042→   9b. Four Numbers — stat grid
+  1043→   ------------------------------------------------------------------ */
+  1044→.numbers-grid {
+  1045→  display: grid;
+  1046→  grid-template-columns: repeat(4, 1fr);
+  1047→  gap: 22px;
+  1048→}
+  1049→.numbers-card {
+  1050→  padding: 32px 24px 24px;
+  1051→  border-radius: 18px;
+  1052→  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+  1053→  border: 1px solid var(--border);
+  1054→  text-align: left;
+  1055→  position: relative;
+  1056→  overflow: hidden;
+  1057→  transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease), border-color 0.3s var(--ease);
+  1058→}
+  1059→.numbers-card::before {
+  1060→  content: "";
+  1061→  position: absolute;
+  1062→  inset: 0;
+  1063→  background: radial-gradient(circle at 50% 0%, rgba(99,102,241,0.10), transparent 55%);
+  1064→  pointer-events: none;
+  1065→  opacity: 0.6;
+  1066→}
+  1067→.numbers-card:hover {
+  1068→  transform: translateY(-3px);
+  1069→  border-color: var(--accent, #06B6D4);
+  1070→  box-shadow: 0 16px 32px -16px rgba(99, 102, 241, 0.45);
+  1071→}
+  1072→.numbers-stat {
+  1073→  font-family: var(--font-head);
+  1074→  font-size: clamp(2.4rem, 5vw, 3.2rem);
+  1075→  font-weight: 800;
+  1076→  line-height: 1;
+  1077→  margin-bottom: 14px;
+  1078→  background: linear-gradient(135deg, var(--indigo), var(--cyan));
+  1079→  -webkit-background-clip: text;
+  1080→  background-clip: text;
+  1081→  -webkit-text-fill-color: transparent;
+  1082→  color: transparent;
+  1083→  position: relative;
+  1084→}
+  1085→.numbers-suffix {
+  1086→  font-size: 0.55em;
+  1087→  margin-left: 1px;
+  1088→  background: inherit;
+  1089→  -webkit-background-clip: text;
+  1090→  background-clip: text;
+  1091→  -webkit-text-fill-color: transparent;
+  1092→}
+  1093→.numbers-desc {
+  1094→  font-size: 0.95rem;
+  1095→  line-height: 1.55;
+  1096→  color: var(--text);
+  1097→  font-weight: 500;
+  1098→  margin-bottom: 12px;
+  1099→  position: relative;
+  1100→}
+  1101→.numbers-source {
+  1102→  font-size: 0.74rem;
+  1103→  font-weight: 600;
+  1104→  letter-spacing: 0.06em;
+  1105→  text-transform: uppercase;
+  1106→  color: var(--text-soft);
+  1107→  position: relative;
+  1108→}
+  1109→@media (max-width: 980px) { .numbers-grid { grid-template-columns: repeat(2, 1fr); } }
+  1110→@media (max-width: 540px) { .numbers-grid { grid-template-columns: 1fr; } }
+  1111→
+  1112→/* section-quiet — slightly subdued background so the stat cards pop */
+  1113→.section-quiet {
+  1114→  background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface) 100%);
+  1115→}
+  1116→
+  1117→/* ------------------------------------------------------------------
+  1118→   9c. Day 1 / Day 30 / Day 90 — transformation timeline cards
+  1119→   ------------------------------------------------------------------ */
+  1120→.transformation-grid {
+  1121→  display: grid;
+  1122→  grid-template-columns: repeat(3, 1fr);
+  1123→  gap: 24px;
+  1124→  position: relative;
+  1125→}
+  1126→.transformation-grid::before {
+  1127→  /* Connector line behind the cards */
+  1128→  content: "";
+  1129→  position: absolute;
+  1130→  top: 60px;
+  1131→  left: 8%;
+  1132→  right: 8%;
+  1133→  height: 2px;
+  1134→  background: linear-gradient(90deg, transparent 0%, var(--border-strong) 12%, var(--border-strong) 88%, transparent 100%);
+  1135→  z-index: 0;
+  1136→}
+  1137→.transform-card {
+  1138→  position: relative;
+  1139→  z-index: 1;
+  1140→  padding: 36px 28px 28px;
+  1141→  display: flex;
+  1142→  flex-direction: column;
+  1143→  gap: 14px;
+  1144→  overflow: visible;
+  1145→}
+  1146→.transform-day {
+  1147→  display: inline-flex;
+  1148→  align-items: center;
+  1149→  align-self: flex-start;
+  1150→  padding: 5px 14px;
+  1151→  border-radius: 999px;
+  1152→  font-family: var(--font-head);
+  1153→  font-size: 0.78rem;
+  1154→  font-weight: 700;
+  1155→  letter-spacing: 0.1em;
+  1156→  text-transform: uppercase;
+  1157→  background: linear-gradient(135deg, var(--indigo), var(--cyan));
+  1158→  color: #fff;
+  1159→  box-shadow: 0 4px 12px -6px rgba(99, 102, 241, 0.55);
+  1160→  margin-bottom: 10px;
+  1161→}
+  1162→.transform-card h3 {
+  1163→  font-family: var(--font-head);
+  1164→  font-size: 1.22rem;
+  1165→  font-weight: 700;
+  1166→  line-height: 1.3;
+  1167→  color: var(--text);
+  1168→  margin: 0 0 4px;
+  1169→}
+  1170→.transform-card p {
+  1171→  margin: 0;
+  1172→  color: var(--text-muted);
+  1173→  font-size: 0.95rem;
+  1174→  line-height: 1.7;
+  1175→}
+  1176→.transform-card p.transform-quote {
+  1177→  margin-top: 4px;
+  1178→  padding: 14px 16px;
+  1179→  border-radius: 12px;
+  1180→  background: rgba(99, 102, 241, 0.05);
+  1181→  border-left: 3px solid var(--indigo);
+  1182→  font-size: 0.92rem;
+  1183→  color: var(--text-soft);
+  1184→  font-style: italic;
+  1185→}
+  1186→.transform-card p.transform-quote em {
+  1187→  color: var(--text);
+  1188→  font-style: italic;
+  1189→  font-weight: 500;
+  1190→}
+  1191→@media (max-width: 980px) {
+  1192→  .transformation-grid { grid-template-columns: 1fr; }
+  1193→  .transformation-grid::before { display: none; }
+  1194→}
+  1195→
+  1196→/* ------------------------------------------------------------------
+  1197→   9. Methodology 8-step grid
+  1198→   ------------------------------------------------------------------ */
+  1199→.methodology-grid {
+  1200→  display: grid;
+  1201→  grid-template-columns: repeat(4, 1fr);
+  1202→  gap: 22px;
+  1203→}
+  1204→.method-card {
+  1205→  padding: 26px;
+  1206→  border-radius: var(--radius);
+  1207→  background: var(--surface);
+  1208→  border: 1px solid var(--border);
+  1209→  position: relative;
+  1210→  overflow: hidden;
+  1211→  transition: transform 0.4s var(--ease), box-shadow 0.4s var(--ease), border-color 0.4s var(--ease);
+  1212→  height: 100%;
+  1213→}
+  1214→.method-card:hover {
+  1215→  transform: translateY(-6px);
+  1216→  box-shadow: var(--shadow-md);
+  1217→  border-color: rgba(99, 102, 241, 0.4);
+  1218→}
+  1219→.method-card::after {
+  1220→  content: "";
+  1221→  position: absolute;
+  1222→  right: -40px;
+  1223→  top: -40px;
+  1224→  width: 120px;
+  1225→  height: 120px;
+  1226→  background: var(--gradient-soft);
+  1227→  border-radius: 50%;
+  1228→  opacity: 0;
+  1229→  transition: opacity 0.4s var(--ease);
+  1230→}
+  1231→.method-card:hover::after { opacity: 1; }
+  1232→.method-head {
+  1233→  display: flex;
+  1234→  align-items: center;
+  1235→  gap: 14px;
+  1236→  margin-bottom: 16px;
+  1237→  position: relative;
+  1238→  z-index: 1;
+  1239→}
+  1240→.step-num {
+  1241→  width: 42px;
+  1242→  height: 42px;
+  1243→  border-radius: 50%;
+  1244→  display: grid;
+  1245→  place-items: center;
+  1246→  font-family: var(--font-head);
+  1247→  font-weight: 800;
+  1248→  font-size: 1.05rem;
+  1249→  color: #fff;
+  1250→  background: var(--gradient);
+  1251→  box-shadow: 0 8px 18px -6px rgba(99, 102, 241, 0.7);
+  1252→  flex-shrink: 0;
+  1253→}
+  1254→.method-icon {
+  1255→  font-size: 1.5rem;
+  1256→  line-height: 1;
+  1257→}
+  1258→.method-card h3 {
+  1259→  font-size: 1.06rem;
+  1260→  font-weight: 700;
+  1261→  margin-bottom: 8px;
+  1262→  position: relative;
+  1263→  z-index: 1;
+  1264→}
+  1265→.method-card p {
+  1266→  font-size: 0.9rem;
+  1267→  color: var(--text-muted);
+  1268→  line-height: 1.6;
+  1269→  margin: 0;
+  1270→  position: relative;
+  1271→  z-index: 1;
+  1272→}
+  1273→
+  1274→/* ------------------------------------------------------------------
+  1275→   10. Dashboard showcase
+  1276→   ------------------------------------------------------------------ */
+  1277→#dashboard { background: var(--bg); }
+  1278→.browser-mock {
+  1279→  max-width: 1100px;
+  1280→  margin: 0 auto;
+  1281→  border-radius: var(--radius-lg);
+  1282→  overflow: hidden;
+  1283→  background: var(--bg-elevated);
+  1284→  border: 1px solid var(--border-strong);
+  1285→  box-shadow: var(--shadow-lg);
+  1286→}
+  1287→.browser-bar {
+  1288→  display: flex;
+  1289→  align-items: center;
+  1290→  gap: 14px;
+  1291→  padding: 12px 16px;
+  1292→  background: var(--surface-2);
+  1293→  border-bottom: 1px solid var(--border);
+  1294→}
+  1295→.browser-dots {
+  1296→  display: flex;
+  1297→  gap: 8px;
+  1298→}
+  1299→.browser-dots span {
+  1300→  width: 12px;
+  1301→  height: 12px;
+  1302→  border-radius: 50%;
+  1303→  display: block;
+  1304→}
+  1305→.browser-dots span:nth-child(1) { background: #ff5f57; }
+  1306→.browser-dots span:nth-child(2) { background: #ffbd2e; }
+  1307→.browser-dots span:nth-child(3) { background: #28c840; }
+  1308→.browser-url {
+  1309→  flex: 1;
+  1310→  display: flex;
+  1311→  align-items: center;
+  1312→  gap: 8px;
+  1313→  background: var(--bg);
+  1314→  border: 1px solid var(--border);
+  1315→  border-radius: 8px;
+  1316→  padding: 7px 14px;
+  1317→  font-size: 0.82rem;
+  1318→  color: var(--text-soft);
+  1319→  font-family: var(--font-head);
+  1320→  overflow: hidden;
+  1321→  white-space: nowrap;
+  1322→  text-overflow: ellipsis;
+  1323→}
+  1324→.browser-url .fas { color: var(--text-soft); font-size: 0.75rem; }
+  1325→.browser-actions {
+  1326→  display: flex;
+  1327→  gap: 14px;
+  1328→  color: var(--text-soft);
+  1329→}
+  1330→.browser-frame {
+  1331→  position: relative;
+  1332→  width: 100%;
+  1333→  height: 960px;
+  1334→  background: var(--bg);
+  1335→}
+  1336→.browser-frame iframe {
+  1337→  width: 100%;
+  1338→  height: 100%;
+  1339→  border: 0;
+  1340→  display: block;
+  1341→  /* iOS Safari needs these to allow touch-scrolling inside an iframe. Without
+  1342→     them, touch events bubble to the parent and the iframe body never scrolls,
+  1343→     so users on iPhone/iPad can't pan the dashboard content into view. */
+  1344→  -webkit-overflow-scrolling: touch;
+  1345→  touch-action: pan-y;
+  1346→}
+  1347→.browser-loading {
+  1348→  position: absolute;
+  1349→  inset: 0;
+  1350→  display: grid;
+  1351→  place-items: center;
+  1352→  color: var(--text-soft);
+  1353→  font-family: var(--font-head);
+  1354→  font-size: 0.9rem;
+  1355→  gap: 12px;
+  1356→}
+  1357→.browser-loading .spinner {
+  1358→  width: 28px;
+  1359→  height: 28px;
+  1360→  border: 3px solid var(--border-strong);
+  1361→  border-top-color: var(--indigo);
+  1362→  border-radius: 50%;
+  1363→  animation: spin 0.8s linear infinite;
+  1364→}
+  1365→
+  1366→/* ============================ DASHBOARD SWITCHER ============================ */
+  1367→.dashboard-switcher {
+  1368→  display: flex;
+  1369→  flex-wrap: wrap;
+  1370→  gap: 8px;
+  1371→  justify-content: center;
+  1372→  margin-bottom: 20px;
+  1373→}
+  1374→.dash-tab {
+  1375→  display: inline-flex;
+  1376→  align-items: center;
+  1377→  gap: 8px;
+  1378→  padding: 10px 16px;
+  1379→  border: 1px solid var(--border);
+  1380→  border-radius: 999px;
+  1381→  background: var(--surface-2);
+  1382→  color: var(--text-soft);
+  1383→  font-family: var(--font-head);
+  1384→  font-size: 0.84rem;
+  1385→  font-weight: 600;
+  1386→  cursor: pointer;
+  1387→  transition: color 180ms ease, border-color 180ms ease, background 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+  1388→  white-space: nowrap;
+  1389→}
+  1390→.dash-tab i {
+  1391→  font-size: 0.82rem;
+  1392→  color: var(--accent);
+  1393→  transition: color 180ms ease;
+  1394→}
+  1395→.dash-tab:hover {
+  1396→  color: var(--text);
+  1397→  border-color: var(--accent);
+  1398→  transform: translateY(-1px);
+  1399→}
+  1400→.dash-tab.is-active {
+  1401→  color: #fff;
+  1402→  border-color: transparent;
+  1403→  background: linear-gradient(135deg, var(--primary), var(--accent));
+  1404→  box-shadow: 0 6px 18px -6px rgba(99, 102, 241, 0.55);
+  1405→}
+  1406→.dash-tab.is-active i {
+  1407→  color: #fff;
+  1408→}
+  1409→.dash-tab:focus-visible {
+  1410→  outline: 2px solid var(--accent);
+  1411→  outline-offset: 2px;
+  1412→}
+  1413→
+  1414→/* (Removed: .dashboard-mobile — iframe is now visible on all breakpoints) */
+  1415→.dashboard-caption {
+  1416→  text-align: center;
+  1417→  margin-top: 24px;
+  1418→  font-size: 0.95rem;
+  1419→  color: var(--text-muted);
+  1420→}
+  1421→.dashboard-caption b { color: var(--text); font-weight: 700; }
+  1422→
+  1423→/* ------------------------------------------------------------------
+  1424→   11. Case studies
+  1425→   ------------------------------------------------------------------ */
+  1426→#cases { background: var(--bg-alt); }
+  1427→.case-grid {
+  1428→  display: grid;
+  1429→  grid-template-columns: repeat(3, 1fr);
+  1430→  gap: 24px;
+  1431→}
+  1432→.case-card {
+  1433→  display: flex;
+  1434→  flex-direction: column;
+  1435→  padding: 0;
+  1436→  overflow: hidden;
+  1437→}
+  1438→.case-banner {
+  1439→  height: 8px;
+  1440→  background: var(--gradient);
+  1441→}
+  1442→.case-body {
+  1443→  padding: 28px;
+  1444→  display: flex;
+  1445→  flex-direction: column;
+  1446→  flex: 1;
+  1447→}
+  1448→.case-industry {
+  1449→  display: inline-flex;
+  1450→  align-items: center;
+  1451→  gap: 8px;
+  1452→  font-family: var(--font-head);
+  1453→  font-size: 0.74rem;
+  1454→  font-weight: 700;
+  1455→  letter-spacing: 0.12em;
+  1456→  text-transform: uppercase;
+  1457→  color: var(--indigo);
+  1458→  margin-bottom: 14px;
+  1459→}
+  1460→.case-card h3 {
+  1461→  font-size: 1.32rem;
+  1462→  font-weight: 700;
+  1463→  margin-bottom: 18px;
+  1464→  line-height: 1.25;
+  1465→}
+  1466→.case-row {
+  1467→  display: flex;
+  1468→  gap: 12px;
+  1469→  margin-bottom: 14px;
+  1470→  font-size: 0.92rem;
+  1471→  line-height: 1.6;
+  1472→  color: var(--text-muted);
+  1473→}
+  1474→.case-row .label {
+  1475→  font-family: var(--font-head);
+  1476→  font-weight: 700;
+  1477→  color: var(--text);
+  1478→  min-width: 88px;
+  1479→  flex-shrink: 0;
+  1480→  font-size: 0.8rem;
+  1481→  text-transform: uppercase;
+  1482→  letter-spacing: 0.06em;
+  1483→  padding-top: 2px;
+  1484→}
+  1485→.case-row .label.success { color: var(--cyan); }
+  1486→.case-tags {
+  1487→  display: flex;
+  1488→  flex-wrap: wrap;
+  1489→  gap: 8px;
+  1490→  margin-top: auto;
+  1491→  padding-top: 18px;
+  1492→  border-top: 1px solid var(--border);
+  1493→}
+  1494→.tag {
+  1495→  font-size: 0.74rem;
+  1496→  font-weight: 600;
+  1497→  padding: 5px 11px;
+  1498→  border-radius: 999px;
+  1499→  background: var(--gradient-soft);
+  1500→  color: var(--indigo);
+  1501→  border: 1px solid rgba(99, 102, 241, 0.2);
+  1502→  font-family: var(--font-head);
+  1503→  letter-spacing: 0.02em;
+  1504→}
+  1505→
+  1506→/* ------------------------------------------------------------------
+  1507→   12. Why now panel (glassmorphism full-width)
+  1508→   ------------------------------------------------------------------ */
+  1509→#why-now {
+  1510→  background: var(--bg);
+  1511→  position: relative;
+  1512→  overflow: hidden;
+  1513→}
+  1514→#why-now::before {
+  1515→  content: "";
+  1516→  position: absolute;
+  1517→  inset: 0;
+  1518→  background:
+  1519→    radial-gradient(600px 400px at 10% 0%, rgba(99,102,241,0.12), transparent 60%),
+  1520→    radial-gradient(600px 400px at 90% 100%, rgba(6,182,212,0.12), transparent 60%);
+  1521→  pointer-events: none;
+  1522→}
+  1523→.why-panel {
+  1524→  position: relative;
+  1525→  z-index: 1;
+  1526→  padding: 48px;
+  1527→  border-radius: var(--radius-xl);
+  1528→  background: var(--glass-bg);
+  1529→  backdrop-filter: blur(20px) saturate(150%);
+  1530→  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  1531→  border: 1px solid var(--glass-border);
+  1532→  box-shadow: var(--shadow-lg);
+  1533→}
+  1534→.why-grid {
+  1535→  display: grid;
+  1536→  grid-template-columns: repeat(4, 1fr);
+  1537→  gap: 28px;
+  1538→}
+  1539→.why-item {
+  1540→  text-align: left;
+  1541→}
+  1542→.why-icon {
+  1543→  width: 52px;
+  1544→  height: 52px;
+  1545→  border-radius: 14px;
+  1546→  display: grid;
+  1547→  place-items: center;
+  1548→  font-size: 1.3rem;
+  1549→  color: #fff;
+  1550→  background: var(--gradient);
+  1551→  box-shadow: 0 8px 18px -6px rgba(99, 102, 241, 0.7);
+  1552→  margin-bottom: 18px;
+  1553→}
+  1554→.why-item h3 {
+  1555→  font-size: 1.12rem;
+  1556→  font-weight: 700;
+  1557→  margin-bottom: 8px;
+  1558→}
+  1559→.why-item p {
+  1560→  font-size: 0.92rem;
+  1561→  color: var(--text-muted);
+  1562→  line-height: 1.65;
+  1563→  margin: 0;
+  1564→}
+  1565→
+  1566→/* ─── Deployment topologies block (sits below the why-grid) ─── */
+  1567→.topology-block {
+  1568→  position: relative;
+  1569→  z-index: 1;
+  1570→  margin-top: 36px;
+  1571→  padding: 36px 36px 28px;
+  1572→  border-radius: var(--radius-xl);
+  1573→  background: linear-gradient(180deg, rgba(99,102,241,0.04), rgba(6,182,212,0.025));
+  1574→  border: 1px dashed var(--border-strong);
+  1575→}
+  1576→.topology-head {
+  1577→  margin-bottom: 28px;
+  1578→  max-width: 760px;
+  1579→}
+  1580→.topology-head h3 {
+  1581→  font-family: var(--font-head);
+  1582→  font-size: clamp(1.25rem, 2.2vw, 1.55rem);
+  1583→  font-weight: 700;
+  1584→  margin: 0 0 10px;
+  1585→  color: var(--text);
+  1586→}
+  1587→.topology-head p {
+  1588→  font-size: 1rem;
+  1589→  line-height: 1.7;
+  1590→  color: var(--text-muted);
+  1591→  margin: 0;
+  1592→}
+  1593→.topology-grid {
+  1594→  display: grid;
+  1595→  grid-template-columns: repeat(3, 1fr);
+  1596→  gap: 22px;
+  1597→}
+  1598→.topology-card {
+  1599→  position: relative;
+  1600→  padding: 26px 24px 22px;
+  1601→  display: flex;
+  1602→  flex-direction: column;
+  1603→  gap: 10px;
+  1604→  transition: transform 0.3s var(--ease), border-color 0.3s var(--ease), box-shadow 0.3s var(--ease);
+  1605→}
+  1606→.topology-card:hover {
+  1607→  transform: translateY(-3px);
+  1608→  border-color: var(--accent, #06B6D4);
+  1609→  box-shadow: 0 16px 32px -16px rgba(99,102,241,0.4);
+  1610→}
+  1611→.topology-tag {
+  1612→  display: inline-flex;
+  1613→  align-self: flex-start;
+  1614→  padding: 3px 10px;
+  1615→  border-radius: 999px;
+  1616→  font-family: var(--font-head);
+  1617→  font-size: 0.66rem;
+  1618→  font-weight: 700;
+  1619→  letter-spacing: 0.12em;
+  1620→  text-transform: uppercase;
+  1621→  color: var(--text-soft);
+  1622→  background: var(--surface-2);
+  1623→  border: 1px solid var(--border);
+  1624→}
+  1625→.topology-icon {
+  1626→  width: 40px;
+  1627→  height: 40px;
+  1628→  border-radius: 10px;
+  1629→  display: grid;
+  1630→  place-items: center;
+  1631→  font-size: 1.05rem;
+  1632→  background: linear-gradient(135deg, rgba(99,102,241,0.14), rgba(6,182,212,0.10));
+  1633→  color: var(--text);
+  1634→  border: 1px solid var(--border);
+  1635→  margin-bottom: 4px;
+  1636→}
+  1637→.topology-card h4 {
+  1638→  font-family: var(--font-head);
+  1639→  font-size: 1.12rem;
+  1640→  font-weight: 700;
+  1641→  color: var(--text);
+  1642→  margin: 0 0 6px;
+  1643→  line-height: 1.3;
+  1644→}
+  1645→.topology-card p {
+  1646→  margin: 0;
+  1647→  font-size: 0.92rem;
+  1648→  line-height: 1.65;
+  1649→  color: var(--text-muted);
+  1650→}
+  1651→.topology-card p strong { color: var(--text); font-weight: 700; }
+  1652→.topology-card p em { color: var(--text); font-style: italic; font-weight: 500; }
+  1653→.topology-card .topology-when {
+  1654→  margin-top: auto;
+  1655→  padding-top: 12px;
+  1656→  border-top: 1px dashed var(--border);
+  1657→}
+  1658→.topology-note {
+  1659→  margin-top: 24px;
+  1660→  padding: 16px 20px;
+  1661→  border-radius: 12px;
+  1662→  background: rgba(99,102,241,0.06);
+  1663→  border-left: 3px solid var(--indigo);
+  1664→  font-size: 0.94rem;
+  1665→  line-height: 1.7;
+  1666→  color: var(--text-soft);
+  1667→  margin-bottom: 0;
+  1668→}
+  1669→@media (max-width: 980px) {
+  1670→  .topology-grid { grid-template-columns: 1fr; }
+  1671→  .topology-block { padding: 24px 18px; }
+  1672→}
+  1673→
+  1674→/* ------------------------------------------------------------------
+  1675→   13. Contact section
+  1676→   ------------------------------------------------------------------ */
+  1677→#contact { background: var(--bg-alt); }
+  1678→.contact-grid {
+  1679→  display: grid;
+  1680→  grid-template-columns: 1.1fr 0.9fr;
+  1681→  gap: 40px;
+  1682→  align-items: stretch;
+  1683→}
+  1684→.contact-form-wrap {
+  1685→  padding: 36px;
+  1686→  border-radius: var(--radius-lg);
+  1687→  background: var(--surface);
+  1688→  border: 1px solid var(--border);
+  1689→  box-shadow: var(--shadow-md);
+  1690→}
+  1691→.contact-form-wrap h3 {
+  1692→  font-size: 1.5rem;
+  1693→  margin-bottom: 6px;
+  1694→}
+  1695→.contact-form-wrap .form-lead {
+  1696→  color: var(--text-muted);
+  1697→  margin-bottom: 26px;
+  1698→  font-size: 0.98rem;
+  1699→}
+  1700→.form-row {
+  1701→  display: grid;
+  1702→  grid-template-columns: 1fr 1fr;
+  1703→  gap: 16px;
+  1704→  margin-bottom: 16px;
+  1705→}
+  1706→.form-field {
+  1707→  display: flex;
+  1708→  flex-direction: column;
+  1709→  gap: 7px;
+  1710→}
+  1711→.form-field label {
+  1712→  font-family: var(--font-head);
+  1713→  font-size: 0.8rem;
+  1714→  font-weight: 600;
+  1715→  letter-spacing: 0.04em;
+  1716→  color: var(--text-muted);
+  1717→}
+  1718→.form-field label .req { color: var(--indigo); }
+  1719→.form-field input,
+  1720→.form-field textarea {
+  1721→  font-family: var(--font-body);
+  1722→  font-size: 0.97rem;
+  1723→  padding: 13px 15px;
+  1724→  border-radius: 10px;
+  1725→  border: 1px solid var(--border-strong);
+  1726→  background: var(--bg);
+  1727→  color: var(--text);
+  1728→  transition: border-color 0.2s var(--ease-soft), box-shadow 0.2s var(--ease-soft);
+  1729→  width: 100%;
+  1730→}
+  1731→.form-field input:focus,
+  1732→.form-field textarea:focus {
+  1733→  outline: none;
+  1734→  border-color: var(--indigo);
+  1735→  box-shadow: var(--ring);
+  1736→}
+  1737→.form-field textarea {
+  1738→  resize: vertical;
+  1739→  min-height: 130px;
+  1740→}
+  1741→.form-submit-row {
+  1742→  display: flex;
+  1743→  align-items: center;
+  1744→  gap: 16px;
+  1745→  margin-top: 8px;
+  1746→}
+  1747→.form-status {
+  1748→  font-size: 0.9rem;
+  1749→  color: var(--text-muted);
+  1750→  min-height: 1.4em;
+  1751→}
+  1752→.form-status.success { color: #16a34a; font-weight: 600; }
+  1753→.form-status.error { color: #dc2626; font-weight: 600; }
+  1754→[data-theme="dark"] .form-status.success { color: #4ade80; }
+  1755→[data-theme="dark"] .form-status.error { color: #f87171; }
+  1756→
+  1757→.contact-info {
+  1758→  display: flex;
+  1759→  flex-direction: column;
+  1760→  gap: 22px;
+  1761→}
+  1762→.info-card {
+  1763→  padding: 28px;
+  1764→  border-radius: var(--radius-lg);
+  1765→  background: var(--surface);
+  1766→  border: 1px solid var(--border);
+  1767→  box-shadow: var(--shadow-sm);
+  1768→}
+  1769→.info-card.glass {
+  1770→  background: var(--glass-bg);
+  1771→  border-color: var(--glass-border);
+  1772→  box-shadow: var(--shadow-md);
+  1773→}
+  1774→.info-item {
+  1775→  display: flex;
+  1776→  align-items: center;
+  1777→  gap: 16px;
+  1778→  padding: 12px 0;
+  1779→}
+  1780→.info-item + .info-item { border-top: 1px solid var(--border); }
+  1781→.info-icon {
+  1782→  width: 46px;
+  1783→  height: 46px;
+  1784→  border-radius: 12px;
+  1785→  display: grid;
+  1786→  place-items: center;
+  1787→  font-size: 1.1rem;
+  1788→  color: #fff;
+  1789→  background: var(--gradient);
+  1790→  flex-shrink: 0;
+  1791→  box-shadow: 0 8px 18px -8px rgba(99, 102, 241, 0.7);
+  1792→}
+  1793→.info-text .label {
+  1794→  font-size: 0.76rem;
+  1795→  text-transform: uppercase;
+  1796→  letter-spacing: 0.08em;
+  1797→  color: var(--text-soft);
+  1798→  font-weight: 600;
+  1799→  margin-bottom: 2px;
+  1800→}
+  1801→.info-text .value {
+  1802→  font-family: var(--font-head);
+  1803→  font-size: 1.05rem;
+  1804→  font-weight: 600;
+  1805→  color: var(--text);
+  1806→}
+  1807→.info-text a.value:hover { color: var(--indigo); }
+  1808→
+  1809→/* Value chain */
+  1810→.value-chain {
+  1811→  margin-top: 4px;
+  1812→}
+  1813→.value-chain-title {
+  1814→  font-family: var(--font-head);
+  1815→  font-size: 0.82rem;
+  1816→  font-weight: 700;
+  1817→  letter-spacing: 0.1em;
+  1818→  text-transform: uppercase;
+  1819→  color: var(--text-soft);
+  1820→  margin-bottom: 16px;
+  1821→}
+  1822→.chain-flow {
+  1823→  display: flex;
+  1824→  align-items: center;
+  1825→  justify-content: space-between;
+  1826→  gap: 6px;
+  1827→}
+  1828→.chain-step {
+  1829→  flex: 1;
+  1830→  text-align: center;
+  1831→  padding: 14px 6px;
+  1832→  border-radius: 12px;
+  1833→  background: var(--gradient-soft);
+  1834→  border: 1px solid rgba(99, 102, 241, 0.22);
+  1835→  font-family: var(--font-head);
+  1836→  font-size: 0.78rem;
+  1837→  font-weight: 700;
+  1838→  color: var(--indigo);
+  1839→}
+  1840→.chain-arrow {
+  1841→  color: var(--cyan);
+  1842→  font-size: 0.85rem;
+  1843→  flex-shrink: 0;
+  1844→}
+  1845→
+  1846→/* ------------------------------------------------------------------
+  1847→   14. Footer
+  1848→   ------------------------------------------------------------------ */
+  1849→.footer {
+  1850→  background: var(--bg);
+  1851→  border-top: 1px solid var(--border);
+  1852→  padding: 56px 0 32px;
+  1853→}
+  1854→[data-theme="dark"] .footer { background: var(--navy-deep); }
+  1855→.footer-top {
+  1856→  display: flex;
+  1857→  flex-wrap: wrap;
+  1858→  justify-content: space-between;
+  1859→  align-items: center;
+  1860→  gap: 24px;
+  1861→  padding-bottom: 32px;
+  1862→  border-bottom: 1px solid var(--border);
+  1863→}
+  1864→.footer-brand {
+  1865→  display: flex;
+  1866→  align-items: center;
+  1867→  gap: 12px;
+  1868→}
+  1869→.footer-brand .brand-name {
+  1870→  font-family: var(--font-head);
+  1871→  font-weight: 700;
+  1872→  font-size: 1.05rem;
+  1873→}
+  1874→.footer-links {
+  1875→  display: flex;
+  1876→  flex-wrap: wrap;
+  1877→  gap: 26px;
+  1878→}
+  1879→.footer-links a {
+  1880→  font-family: var(--font-head);
+  1881→  font-size: 0.92rem;
+  1882→  font-weight: 500;
+  1883→  color: var(--text-muted);
+  1884→}
+  1885→.footer-links a:hover { color: var(--indigo); }
+  1886→.footer-bottom {
+  1887→  padding-top: 24px;
+  1888→  display: flex;
+  1889→  flex-wrap: wrap;
+  1890→  justify-content: space-between;
+  1891→  align-items: center;
+  1892→  gap: 12px;
+  1893→  font-size: 0.86rem;
+  1894→  color: var(--text-soft);
+  1895→}
+  1896→.footer-tagline {
+  1897→  font-family: var(--font-head);
+  1898→  font-weight: 600;
+  1899→  color: var(--text);
+  1900→  letter-spacing: -0.005em;
+  1901→}
+  1902→.footer-tagline em {
+  1903→  font-style: italic;
+  1904→  font-weight: 500;
+  1905→  background: linear-gradient(135deg, var(--indigo), var(--cyan));
+  1906→  -webkit-background-clip: text;
+  1907→  background-clip: text;
+  1908→  -webkit-text-fill-color: transparent;
+  1909→  color: transparent;
+  1910→}
+  1911→.footer-sep { color: var(--border-strong); margin: 0 4px; }
+  1912→.footer-bottom .social {
+  1913→  display: flex;
+  1914→  gap: 12px;
+  1915→}
+  1916→.footer-bottom .social a {
+  1917→  width: 28px;
+  1918→  height: 28px;
+  1919→  border-radius: 50%;
+  1920→  display: grid;
+  1921→  place-items: center;
+  1922→  border: 1px solid var(--border);
+  1923→  color: var(--text-muted);
+  1924→  transition: all 0.3s var(--ease);
+  1925→}
+  1926→.footer-bottom .social a:hover {
+  1927→  color: var(--indigo);
+  1928→  border-color: var(--indigo);
+  1929→  transform: translateY(-3px);
+  1930→}
+  1931→
+  1932→/* ------------------------------------------------------------------
+  1933→   15. Reveal animations
+  1934→   ------------------------------------------------------------------ */
+  1935→.reveal,
+  1936→[data-stagger-item] {
+  1937→  opacity: 0;
+  1938→  transform: translateY(28px);
+  1939→  transition: opacity 0.7s var(--ease), transform 0.7s var(--ease);
+  1940→  will-change: opacity, transform;
+  1941→}
+  1942→.reveal.is-visible,
+  1943→[data-stagger-item].is-visible {
+  1944→  opacity: 1;
+  1945→  transform: none;
+  1946→}
+  1947→.reveal-left { transform: translateX(-32px); }
+  1948→.reveal-right { transform: translateX(32px); }
+  1949→.reveal-scale { transform: scale(0.96); }
+  1950→.reveal-left.is-visible,
+  1951→.reveal-right.is-visible,
+  1952→.reveal-scale.is-visible {
+  1953→  transform: none;
+  1954→}
+  1955→
+  1956→@media (prefers-reduced-motion: reduce) {
+  1957→  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  1958→  /* Disable scroll snapping for reduced-motion users — they should be able
+  1959→     to scroll freely without the browser re-anchoring to section starts. */
+  1960→  html { scroll-snap-type: none !important; }
+  1961→  .section, .hero { scroll-snap-align: none !important; }
+  1962→  .reveal, [data-stagger-item] { opacity: 1; transform: none; }
+  1963→  .scroll-mouse::before { animation: none; }
+  1964→}
+  1965→
+  1966→/* ------------------------------------------------------------------
+  1967→   16. Responsive — tablet
+  1968→   ------------------------------------------------------------------ */
+  1969→@media (max-width: 1024px) {
+  1970→  .section { padding: 80px 0; }
+  1971→  .why-grid { grid-template-columns: repeat(2, 1fr); gap: 32px; }
+  1972→  .methodology-grid { grid-template-columns: repeat(4, 1fr); }
+  1973→  .browser-frame { height: 560px; }
+  1974→}
+  1975→
+  1976→/* ------------------------------------------------------------------
+  1977→   17. Responsive — mobile
+  1978→   ------------------------------------------------------------------ */
+  1979→@media (max-width: 860px) {
+  1980→  body { font-size: 16px; }
+  1981→  .section { padding: 64px 0; }
+  1982→  .section-head { margin-bottom: 40px; }
+  1983→
+  1984→  /* Show hamburger menu on portrait tablets + phones (≤860px) — inline nav-links
+  1985→     hidden because the screen doesn't have enough horizontal room for the 4 links
+  1986→     alongside brand + theme-toggle + AI button + hamburger. */
+  1987→  .nav-links { display: none; }
+  1988→  .nav-actions .nav-cta { display: none; }
+  1989→  .menu-toggle { display: flex; margin-left: auto; }
+  1990→
+  1991→  .problem-grid { grid-template-columns: 1fr; }
+  1992→  .methodology-grid { grid-template-columns: repeat(2, 1fr); }
+  1993→  .case-grid { grid-template-columns: 1fr; }
+  1994→  .why-grid { grid-template-columns: 1fr; }
+  1995→  .contact-grid { grid-template-columns: 1fr; }
+  1996→
+  1997→  .why-panel { padding: 28px; }
+  1998→
+  1999→  .form-row { grid-template-columns: 1fr; }
+  2000→
+
+[showing lines 1-2000 of 2932; use offset=2001 with limit to continue reading]
