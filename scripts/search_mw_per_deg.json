@@ -1,0 +1,74 @@
+[
+  {
+    "url": "https://www.analog.com",
+    "name": "Reliability Handbook",
+    "snippet": "The package may be derated at 20 mW per degree centigrade. In such case, in an environment of 70°C, the device is limited to 800 mW. ENHANCING THE HEAT ... Read more 110 pages",
+    "host_name": "www.analog.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.yic-electronics.com",
+    "name": "BZX384-A16-QX | Nexperia USA Inc.",
+    "snippet": "... temperature below 150°C. A typical derating curve would reduce available power dissipation by approximately 2–3 mW per degree Celsius above 25°C ambient.",
+    "host_name": "www.yic-electronics.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://iusd.org",
+    "name": "SECTION 00 01 01 PROJECT TITLE PAGE",
+    "snippet": "by CA IRVINE — 3) Heat Dissipation Constant: 2.7 mW per degree C. c. Temperature ... electrical load “cycling” after installation is complete. The ... Read more",
+    "host_name": "iusd.org",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.nwacc.edu",
+    "name": "Project Manual",
+    "snippet": "Jun 30, 2023 — ... mW per degree C. c. Temperature Transmitter: 1). Accuracy: 0.10 degree F minimum or plus/minus 0.20 percent of span. 2). Output: 4 to 20 mA. d ... Read more 528 pages",
+    "host_name": "www.nwacc.edu",
+    "rank": 3,
+    "date": "Jun 30, 2023",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.allelcoelec.com",
+    "name": "BZX384B6V2-E3-08 | Vishay General Semiconductor - Diodes",
+    "snippet": "A common rule-of-thumb is to reduce allowable power by 1.5–2 mW per degree Celsius rise above 25°C. For example, at 85°C ambient, usable power drops to ...",
+    "host_name": "www.allelcoelec.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.worldradiohistory.com",
+    "name": "i i 0 CONS! UCT 0 R",
+    "snippet": "Jan 6, 1971 — makers as 1.2 mW per degree Centi- grade the thermistor will be approximately 0.1°C above the ambient temperature . This can, the author ... Read more",
+    "host_name": "www.worldradiohistory.com",
+    "rank": 5,
+    "date": "Jan 6, 1971",
+    "favicon": ""
+  },
+  {
+    "url": "https://archive.org",
+    "name": "Full text of \"alliedElectronics :: catalogs :: 1976 Allied",
+    "snippet": "Operating (junc- tion) temperature : —40° to +110° C. Max. trigger firing cap.: 0.15 //F. Derates 3 mW per degree above +25° C. Sensitive Gate SCR's ... Read more",
+    "host_name": "archive.org",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.ic-components.com",
+    "name": "1SMA4745-GT3 SMC Diode Solutions",
+    "snippet": "... power handling by approximately 6.67 mW per degree Celsius rise according to standard DO-214AC thermal characteristics. For continuous operation at 85°C ... Read more",
+    "host_name": "www.ic-components.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  }
+]

@@ -1,0 +1,83 @@
+[
+  {
+    "url": "https://www.iaeng.org",
+    "name": "A Novel Approach for Forecasting of Residential,",
+    "snippet": "by MK Moghaddam · 2012 · Cited by 2 — Compared to residential loads , commercial loads exhibit higher temperature sensitivity in hot seasons and lower temperature sensitivity in cold seasons. The ... Read more",
+    "host_name": "www.iaeng.org",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://epublications.marquette.edu",
+    "name": "The Impact of Additional Weather Inputs on Gas Load Forecasting",
+    "snippet": "current forecasting method used by GasDay usually has forecasting errors for gas flow that is not temperature sensitive or has low temperature sensitivity [45].",
+    "host_name": "epublications.marquette.edu",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://eta-publications.lbl.gov",
+    "name": "A Guide for Improved Resource Adequacy Assessments in",
+    "snippet": "by JP Carvallo · 2023 · Cited by 19 — ... load data that implicitly capture seasonal and annual temperature sensitivity , as well as long-term trends. The current best practice is to develop ... Read more 85 pages",
+    "host_name": "eta-publications.lbl.gov",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.sciencedirect.com",
+    "name": "Grid infrastructure planning in a changing climate",
+    "snippet": "by AM Brockway · 2020 · Cited by 70 — However, the documentation indicates that adjustments are based on the temperature-sensitivity of existing load and do not consider more profound changes that ... Read more",
+    "host_name": "www.sciencedirect.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://westernenergyboard.org",
+    "name": "Resource Adequacy in the West: Current State of Affairs",
+    "snippet": "by C Eckstrom — The temperature sensitivity of gas units requires planners to recognize the seasonality of gas supply. All of these features contribute to the complexity of ... Read more",
+    "host_name": "westernenergyboard.org",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://agupubs.onlinelibrary.wiley.com",
+    "name": "The Challenge Posed by Space Weather to High‐Voltage",
+    "snippet": "Nov 28, 2019 — ... temperature sensitivity of 0.4% per degree Celsius (National ... These load forecasting error metrics serve as useful benchmarks by ... Read more",
+    "host_name": "agupubs.onlinelibrary.wiley.com",
+    "rank": 5,
+    "date": "Nov 28, 2019",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.aceee.org",
+    "name": "Using Smart Meter Time Series Data to Derive Household",
+    "snippet": "by S Patel · Cited by 3 — Change point regression and load disaggregation models can estimate the temperature sensitivity of a household's electricity consumption, which provides insight ... Read more",
+    "host_name": "www.aceee.org",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://papers.ssrn.com",
+    "name": "Battery power–energy substitution by district cooling and",
+    "snippet": "A structural temperature sensitivity uniformly adds 0, 2, 4 and 6 °C to dry-bulb temperature while retaining event irradiance timing and relative humidity. The ... Read more",
+    "host_name": "papers.ssrn.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.yesenergy.com",
+    "name": "Power Market Data, Analysis, Reports, & Webinars",
+    "snippet": "Temperature Sensitivity Across European Power Markets. As demand patterns continue to evolve, understanding how temperature influences electricity consumption ... Read more",
+    "host_name": "www.yesenergy.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  }
+]
