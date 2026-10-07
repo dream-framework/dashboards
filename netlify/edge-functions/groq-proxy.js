@@ -133,6 +133,18 @@ var cumulative = { totalVisits: 0, ips: {}, devices: {} };
 var blobLoaded = false;
 var blobWritesPending = 0;
 
+// ─── IP blocklist ────────────────────────────────────────────────────────
+// Visits from these IPs are NOT counted toward totalVisits / device / IP maps.
+// Used to exclude the owner's own IP (and any other internal/synthetic
+// traffic) so admin stats reflect real external visitors only.
+// NOTE: on blob read, prior counts for these IPs are also subtracted from
+// cumulative.totalVisits and removed from cumulative.ips — a one-time
+// reconciliation pass that runs in readCumulative() so old inflated
+// counts get corrected automatically on the next deploy.
+const EXCLUDED_IPS = new Set([
+  '70.54.144.197'   // owner — do not self-count
+]);
+
 function logVisit(request, context) {
   const headers = request.headers;
   const geo = context.geo || {};
@@ -176,6 +188,13 @@ function logVisit(request, context) {
            'unknown';
   // Validate: strip brackets from IPv6, trim whitespace
   ip = ip.replace(/^\[|\]$/g, '').trim();
+
+  // ─── Skip excluded IPs (owner / internal / synthetic traffic) ────────
+  // These IPs are not counted as visits at all — return early so neither
+  // the visit log nor cumulative stats see them.
+  if (EXCLUDED_IPS.has(ip)) {
+    return null;
+  }
 
   var ua = headers.get('user-agent') || 'unknown';
   var device = parseDeviceUA(ua);
@@ -249,6 +268,28 @@ async function readCumulative() {
           var data = await s3Res.json();
           if (data && typeof data.totalVisits === 'number') {
             cumulative = data;
+            // ─── One-time reconciliation: subtract prior counts for any
+            // IP that is now in EXCLUDED_IPS but was counted before this
+            // fix shipped. Without this, the owner's old self-visits stay
+            // baked into totalVisits / ips forever. The corrected cumulative
+            // is persisted on the next writeCumulative() call.
+            if (cumulative.ips && EXCLUDED_IPS.size > 0) {
+              var corrected = false;
+              for (var excludedIp of EXCLUDED_IPS) {
+                if (cumulative.ips[excludedIp]) {
+                  var stale = cumulative.ips[excludedIp];
+                  cumulative.totalVisits = Math.max(0, cumulative.totalVisits - stale);
+                  delete cumulative.ips[excludedIp];
+                  corrected = true;
+                }
+              }
+              if (corrected) {
+                // Persist the corrected counts immediately so we don't
+                // re-subtract on the next cold start (idempotent guard).
+                blobWritesPending = 0;
+                writeCumulative();
+              }
+            }
           }
         }
       }
@@ -416,8 +457,13 @@ export default async (request, context) => {
       const deviceList = Object.entries(cumulative.devices || {})
         .map(([device, count]) => ({ device, visits: count }))
         .sort((a, b) => b.visits - a.visits);
-      // Build IP list sorted by visit count (mask last octet for privacy)
+      // Build IP list sorted by visit count (mask last octet for privacy).
+      // Filter out excluded IPs — even after the reconciliation pass in
+      // readCumulative removes them from the blob, this guards against
+      // any in-memory race where the IP was re-added before the blob
+      // write flushed.
       const ipList = Object.entries(cumulative.ips || {})
+        .filter(([ip]) => !EXCLUDED_IPS.has(ip))
         .map(([ip, count]) => ({
           ip: ip.replace(/(\d+\.\d+\.\d+)\.\d+/, '$1.xxx'),
           visits: count
@@ -470,11 +516,16 @@ export default async (request, context) => {
       // Filter by 72-hour retention
       const cutoff = Date.now() - VISIT_RETENTION_MS;
       const recent72h = deduped.filter(v => new Date(v.ts).getTime() > cutoff);
+      // Filter out excluded IPs from the 72h detail view too — the
+      // owner shouldn't see their own polling/heartbeats in this list.
+      const filtered72h = EXCLUDED_IPS.size > 0
+        ? recent72h.filter(v => !EXCLUDED_IPS.has(v.ip))
+        : recent72h;
       // Sort newest first
-      recent72h.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+      filtered72h.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
       return new Response(JSON.stringify({
-        count: recent72h.length,
-        visits: recent72h,
+        count: filtered72h.length,
+        visits: filtered72h,
         retentionHours: 72,
         source: visitStore ? 'netlify:blobs (persistent)' : 'in-memory (per-instance)',
         cumulative: {

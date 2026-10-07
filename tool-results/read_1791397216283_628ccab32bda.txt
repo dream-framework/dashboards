@@ -1,0 +1,737 @@
+     1→// ════════════════════════════════════════════════════════════════════════════
+     2→//  groq-proxy — Netlify Edge Function (Groq upstream + in-memory cache)
+     3→//
+     4→//  Switched back to Groq after OpenRouter's poolside/laguna-s-2.1:free
+     5→//  turned out to be too rate-limited (429 upstream). Groq's qwen-3.8-27b
+     6→//  was working fine before — just needs the cache layer to stay under
+     7→//  the 200K TPD free-tier cap.
+     8→//
+     9→//  In-memory cache (per-edge-instance, no netlify:blobs import needed):
+    10→//    - Keyed by SHA-256 of request body
+    11→//    - TTL: 24 hours
+    12→//    - Cache hit: stream the cached text back as simulated SSE
+    13→//    - Cache miss: call Groq, stream to client, store in memory
+    14→//    - Lower hit rate than Netlify Blobs (per-instance, not shared across
+    15→//      edges) but works without the bundler issues that blocked Blobs
+    16→//
+    17→//  Verify pings (max_tokens <= 5) SKIP the cache — real health checks.
+    18→//  ════════════════════════════════════════════════════════════════════════════
+    19→
+    20→const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+    21→const DEFAULT_MODEL = 'qwen/qwen3.8-27b';
+    22→const CACHE_TTL_MS = 24 * 60 * 60 * 1000;  // 24 hours
+    23→const VERIFY_MAX_TOKENS = 5;
+    24→
+    25→// Allowed origins for CORS. The first entry is the FALLBACK returned when
+    26→// the request origin isn't in the list — keep 'https://insight-analytics.ca'
+    27→// as [0] so production always works even if a new origin slips through.
+    28→// IMPORTANT: when adding a new origin, also verify the deployed Netlify
+    29→// edge function actually has this list (a stale deployed version was the
+    30→// root cause of the personalized-power-automate demo failing with
+    31→// "Couldn't reach the AI service" on insight-analytics.ca — Oct 2026).
+    32→const ALLOWED_ORIGINS = [
+    33→  'https://insight-analytics.ca',
+    34→  'https://www.insight-analytics.ca',
+    35→  'https://insightanalyticsca.github.io',
+    36→  'http://localhost:3000',
+    37→  'http://127.0.0.1:3000',
+    38→  'http://localhost:5173',
+    39→  'http://127.0.0.1:5173'
+    40→];
+    41→
+    42→function corsHeaders(origin) {
+    43→  const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+    44→  return {
+    45→    'Access-Control-Allow-Origin': allow,
+    46→    'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
+    47→    'Access-Control-Allow-Headers': 'Content-Type, X-Page, X-Page-Url',
+    48→    'Access-Control-Max-Age': '86400',
+    49→    'Vary': 'Origin'
+    50→  };
+    51→}
+    52→
+    53→// ─── In-memory cache (per-edge-instance) ─────────────────────────────────
+    54→// Netlify Blobs would be shared across edges, but the import failed the
+    55→// local bundler. In-memory is per-instance but still saves tokens within
+    56→// a single edge — most users in the same region hit the same instance.
+    57→const memCache = new Map();
+    58→
+    59→// ─── Persistent visit log via netlify:blobs (shared across all edges) ──────
+    60→// The in-memory visitLog is per-instance and lost when the edge recycles.
+    61→// netlify:blobs provides persistent, shared storage that survives edge
+    62→// restarts. We initialize it lazily (inside an async function) because
+    63→// top-level await is not supported by Netlify's CJS bundler.
+    64→let visitStore = null;
+    65→let visitStoreInitDone = false;
+    66→const VISIT_RETENTION_MS = 72 * 60 * 60 * 1000; // 72 hours
+    67→const MAX_VISITS_BLOB = 2000; // cap blob size
+    68→let visitBlobWritesPending = 0;
+    69→
+    70→async function ensureVisitStore() {
+    71→  if (visitStoreInitDone) return visitStore;
+    72→  visitStoreInitDone = true;
+    73→  try {
+    74→    const blobs = await import('netlify:blobs');
+    75→    visitStore = blobs.getStore('visit-stats');
+    76→  } catch (e) {
+    77→    // netlify:blobs not available — in-memory only (same as before)
+    78→    visitStore = null;
+    79→  }
+    80→  return visitStore;
+    81→}
+    82→
+    83→async function readVisitLogBlob() {
+    84→  await ensureVisitStore();
+    85→  if (!visitStore) return [];
+    86→  try {
+    87→    const data = await visitStore.get('visits-72h');
+    88→    if (!data) return [];
+    89→    const visits = JSON.parse(data);
+    90→    if (!Array.isArray(visits)) return [];
+    91→    // Filter by 72-hour retention
+    92→    const cutoff = Date.now() - VISIT_RETENTION_MS;
+    93→    return visits.filter(v => new Date(v.ts).getTime() > cutoff);
+    94→  } catch (e) {
+    95→    return [];
+    96→  }
+    97→}
+    98→
+    99→async function writeVisitLogBlob(newVisits) {
+   100→  await ensureVisitStore();
+   101→  if (!visitStore || newVisits.length === 0) return;
+   102→  try {
+   103→    // Read existing blob visits, merge with new, dedupe, trim, write back
+   104→    const existing = await readVisitLogBlob();
+   105→    const merged = [...existing, ...newVisits];
+   106→    // Deduplicate by ts + ip
+   107→    const seen = new Set();
+   108→    const deduped = merged.filter(v => {
+   109→      const key = v.ts + '|' + v.ip;
+   110→      if (seen.has(key)) return false;
+   111→      seen.add(key);
+   112→      return true;
+   113→    });
+   114→    // Sort newest first
+   115→    deduped.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+   116→    // Trim to max
+   117→    const trimmed = deduped.slice(0, MAX_VISITS_BLOB);
+   118→    await visitStore.set('visits-72h', JSON.stringify(trimmed));
+   119→  } catch (e) {
+   120→    // silent — don't break the edge function
+   121→  }
+   122→}
+   123→
+   124→// ─── Visit logging + persistent cumulative stats ───────────────────────────
+   125→const visitLog = [];
+   126→const MAX_VISITS = 500;
+   127→const ADMIN_PASSWORD = 'Domino88!!';
+   128→const BLOB_STORE = 'visit-stats';
+   129→const BLOB_KEY = 'cumulative';
+   130→
+   131→// In-memory cumulative stats (restored from Blob on startup)
+   132→var cumulative = { totalVisits: 0, ips: {}, devices: {} };
+   133→var blobLoaded = false;
+   134→var blobWritesPending = 0;
+   135→
+   136→function logVisit(request, context) {
+   137→  const headers = request.headers;
+   138→  const geo = context.geo || {};
+   139→  var referrer = headers.get('referer') || headers.get('referrer') || 'direct';
+   140→  // Page the visitor was on — try explicit headers first (X-Page), then query
+   141→  // param (beacon sends ?page=...), then derive from Referer (may be stripped
+   142→  // to origin by browser Referrer-Policy for cross-origin requests)
+   143→  var page = headers.get('x-page') || '';
+   144→  if (!page) {
+   145→    try { page = new URL(request.url).searchParams.get('page') || ''; } catch(_) {}
+   146→  }
+   147→  if (!page) {
+   148→    page = 'direct';
+   149→    if (referrer && referrer !== 'direct') {
+   150→      try {
+   151→        var refUrl = new URL(referrer);
+   152→        page = refUrl.pathname.replace(/^\/dashboards\/?/, '') || 'index.html';
+   153→        if (refUrl.hash) page += refUrl.hash;
+   154→      } catch(e) {
+   155→        page = referrer.slice(0, 80);
+   156→      }
+   157→    }
+   158→  }
+   159→
+   160→  // ─── Extract the REAL visitor IP (not CDN/proxy IP) ──────────────────────
+   161→  // Priority order (per Fastly/CDN best practices):
+   162→  //   1. Fastly-Client-IP — Fastly's locked copy of the first client IP
+   163→  //   2. X-Forwarded-For — first (leftmost) IP is the real visitor
+   164→  //   3. X-Real-IP — clean copy of the original IP
+   165→  //   4. x-nf-client-connection-ip — Netlify's own IP detection
+   166→  //   5. cf-connecting-ip — Cloudflare's IP (if behind CF)
+   167→  //   6. Raw socket IP (fallback — may be a CDN/proxy IP, not the real visitor)
+   168→  // NOTE: Apple iCloud Private Relay masks the IP at the device level via
+   169→  // Fastly — in that case, even Fastly-Client-IP will be a Fastly-owned IP
+   170→  // (typically 2a04:4e41:...). This is mathematically impossible to bypass.
+   171→  var ip = headers.get('fastly-client-ip') ||
+   172→           (headers.get('x-forwarded-for') || '').split(',')[0].trim() ||
+   173→           headers.get('x-real-ip') ||
+   174→           headers.get('x-nf-client-connection-ip') ||
+   175→           headers.get('cf-connecting-ip') ||
+   176→           'unknown';
+   177→  // Validate: strip brackets from IPv6, trim whitespace
+   178→  ip = ip.replace(/^\[|\]$/g, '').trim();
+   179→
+   180→  var ua = headers.get('user-agent') || 'unknown';
+   181→  var device = parseDeviceUA(ua);
+   182→  var country = geo.country?.name || geo.country || 'unknown';
+   183→  var city = geo.city?.name || geo.city || 'unknown';
+   184→
+   185→  const visit = { ts: new Date().toISOString(), ip, country, city, page, method: request.method, ua };
+   186→  visitLog.push(visit);
+   187→  if (visitLog.length > MAX_VISITS) visitLog.shift();
+   188→
+   189→  // Update cumulative stats
+   190→  cumulative.totalVisits++;
+   191→  cumulative.ips[ip] = (cumulative.ips[ip] || 0) + 1;
+   192→  cumulative.devices[device] = (cumulative.devices[device] || 0) + 1;
+   193→  blobWritesPending++;
+   194→
+   195→  // Write to Blob every 5 visits (reduces API calls)
+   196→  // Guard: don't write until the initial read has completed — otherwise
+   197→  // we overwrite the persistent blob with empty stats on every deploy
+   198→  if (blobWritesPending >= 5 && blobLoaded) {
+   199→    blobWritesPending = 0;
+   200→    writeCumulative();
+   201→  }
+   202→
+   203→  // Also flush the visit log to the persistent blob every 5 visits
+   204→  visitBlobWritesPending++;
+   205→  if (visitBlobWritesPending >= 5) {
+   206→    visitBlobWritesPending = 0;
+   207→    // Flush the last 10 in-memory visits to the blob
+   208→    const recent = visitLog.slice(-10);
+   209→    writeVisitLogBlob(recent);
+   210→  }
+   211→  return visit;
+   212→}
+   213→
+   214→function parseDeviceUA(ua) {
+   215→  if (!ua || ua === 'unknown') return 'unknown';
+   216→  var browser = 'Other';
+   217→  if (ua.indexOf('Edg/') >= 0) browser = 'Edge';
+   218→  else if (ua.indexOf('OPR/') >= 0) browser = 'Opera';
+   219→  else if (ua.indexOf('Chrome/') >= 0) browser = 'Chrome';
+   220→  else if (ua.indexOf('Firefox/') >= 0) browser = 'Firefox';
+   221→  else if (ua.indexOf('Safari/') >= 0 && ua.indexOf('Chrome/') < 0) browser = 'Safari';
+   222→  else if (ua.indexOf('curl') >= 0 || ua.indexOf('python') >= 0) browser = 'Bot';
+   223→  var os = 'Other';
+   224→  if (ua.indexOf('iPhone') >= 0) os = 'iPhone';
+   225→  else if (ua.indexOf('iPad') >= 0) os = 'iPad';
+   226→  else if (ua.indexOf('Android') >= 0) os = 'Android';
+   227→  else if (ua.indexOf('Mac OS') >= 0 || ua.indexOf('Macintosh') >= 0) os = 'macOS';
+   228→  else if (ua.indexOf('Windows') >= 0) os = 'Windows';
+   229→  else if (ua.indexOf('Linux') >= 0) os = 'Linux';
+   230→  return browser + ' · ' + os;
+   231→}
+   232→
+   233→// ─── Netlify Blobs REST API (two-step: API → pre-signed S3 URL) ───────────
+   234→async function readCumulative() {
+   235→  var siteId = Deno.env.get('NETLIFY_SITE_ID');
+   236→  var token = Deno.env.get('NETLIFY_API_TOKEN');
+   237→  if (!siteId || !token) { blobLoaded = true; return; }
+   238→  var apiUrl = 'https://api.netlify.com/api/v1/sites/' + siteId + '/blobs/' + BLOB_STORE + '/' + BLOB_KEY;
+   239→  try {
+   240→    // Step 1: GET the API → returns a pre-signed S3 URL
+   241→    var apiRes = await fetch(apiUrl, { headers: { 'Authorization': 'Bearer ' + token } });
+   242→    if (apiRes.status === 200) {
+   243→      var apiData = await apiRes.json();
+   244→      var s3Url = apiData.url;
+   245→      if (s3Url) {
+   246→        // Step 2: GET the actual data from S3
+   247→        var s3Res = await fetch(s3Url);
+   248→        if (s3Res.status === 200) {
+   249→          var data = await s3Res.json();
+   250→          if (data && typeof data.totalVisits === 'number') {
+   251→            cumulative = data;
+   252→          }
+   253→        }
+   254→      }
+   255→    }
+   256→  } catch(e) { /* first run — blob doesn't exist yet */ }
+   257→  blobLoaded = true;
+   258→}
+   259→
+   260→async function writeCumulative() {
+   261→  var siteId = Deno.env.get('NETLIFY_SITE_ID');
+   262→  var token = Deno.env.get('NETLIFY_API_TOKEN');
+   263→  if (!siteId || !token) return;
+   264→  var apiUrl = 'https://api.netlify.com/api/v1/sites/' + siteId + '/blobs/' + BLOB_STORE + '/' + BLOB_KEY;
+   265→  try {
+   266→    // Step 1: PUT to the API → returns a pre-signed S3 URL
+   267→    var apiRes = await fetch(apiUrl, {
+   268→      method: 'PUT',
+   269→      headers: { 'Authorization': 'Bearer ' + token }
+   270→    });
+   271→    if (apiRes.status === 200) {
+   272→      var apiData = await apiRes.json();
+   273→      var s3Url = apiData.url;
+   274→      if (s3Url) {
+   275→        // Step 2: PUT the actual JSON data to S3
+   276→        await fetch(s3Url, {
+   277→          method: 'PUT',
+   278→          headers: { 'Content-Type': 'application/json' },
+   279→          body: JSON.stringify(cumulative)
+   280→        });
+   281→      }
+   282→    }
+   283→  } catch(e) { /* silent — retry on next batch */ }
+   284→}
+   285→
+   286→// Restore cumulative stats from Blob on startup (fire-and-forget, but
+   287→// guarded by blobLoaded — no writes happen until this completes)
+   288→readCumulative().then(function() {
+   289→  // Once loaded, flush any pending writes that were blocked
+   290→  if (blobWritesPending > 0) {
+   291→    blobWritesPending = 0;
+   292→    writeCumulative();
+   293→  }
+   294→});
+   295→
+   296→async function sha256(text) {
+   297→  const data = new TextEncoder().encode(text);
+   298→  const hash = await crypto.subtle.digest('SHA-256', data);
+   299→  return Array.from(new Uint8Array(hash))
+   300→    .map(b => b.toString(16).padStart(2, '0'))
+   301→    .join('');
+   302→}
+   303→
+   304→// Simulate SSE streaming from a cached text — preserves the streaming UX
+   305→function simulatedSSEStream(fullText, model) {
+   306→  const id = 'cache-' + Date.now();
+   307→  const encoder = new TextEncoder();
+   308→  return new ReadableStream({
+   309→    async start(controller) {
+   310→      const chunks = fullText.match(/\S+\s*/g) || [fullText];
+   311→      for (const chunk of chunks) {
+   312→        const openaiChunk = {
+   313→          id,
+   314→          object: 'chat.completion.chunk',
+   315→          created: Math.floor(Date.now() / 1000),
+   316→          model,
+   317→          choices: [{
+   318→            index: 0,
+   319→            delta: { content: chunk },
+   320→            finish_reason: null
+   321→          }]
+   322→        };
+   323→        controller.enqueue(encoder.encode('data: ' + JSON.stringify(openaiChunk) + '\n\n'));
+   324→        await new Promise(r => setTimeout(r, 8));
+   325→      }
+   326→      const finalChunk = {
+   327→        id,
+   328→        object: 'chat.completion.chunk',
+   329→        created: Math.floor(Date.now() / 1000),
+   330→        model,
+   331→        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
+   332→      };
+   333→      controller.enqueue(encoder.encode('data: ' + JSON.stringify(finalChunk) + '\n\n'));
+   334→      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+   335→      controller.close();
+   336→    }
+   337→  });
+   338→}
+   339→
+   340→export default async (request, context) => {
+   341→  const origin = request.headers.get('origin') || '';
+   342→
+   343→  // ─── Log every visit (IP, geo, UA, timestamp) ──────────────────────────
+   344→  // Skip logging for polling/admin endpoints — otherwise the 5-second
+   345→  // auto-poll (op=visits, op=devices) and the footer pill (op=stats)
+   346→  // create self-referential loops where every poll logs itself as a
+   347→  // "visit", inflating the count with heartbeats. Only op=beacon (real
+   348→  // page load) and chat completion POST calls (AI usage) are logged.
+   349→  const _url = new URL(request.url);
+   350→  const _op = _url.searchParams.get('op');
+   351→  if (_op !== 'visits' && _op !== 'models' && _op !== 'stats' && _op !== 'devices') {
+   352→    logVisit(request, context);
+   353→  }
+   354→
+   355→  if (request.method === 'OPTIONS') {
+   356→    return new Response(null, { status: 204, headers: corsHeaders(origin) });
+   357→  }
+   358→
+   359→  // GET endpoints
+   360→  if (request.method === 'GET') {
+   361→    const url = new URL(request.url);
+   362→    const op = url.searchParams.get('op');
+   363→
+   364→    // op=beacon — lightweight visit logger called from the lander on page load
+   365→    // Returns a 1x1 transparent pixel so it can be used as an image beacon
+   366→    if (op === 'beacon') {
+   367→      return new Response(
+   368→        new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0xff, 0xff, 0xff, 0x21, 0xf9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b]),
+   369→        { status: 200, headers: { 'Content-Type': 'image/gif', ...corsHeaders(origin) } }
+   370→      );
+   371→    }
+   372→
+   373→    // op=stats — PUBLIC endpoint (no password) for the lander footer pill
+   374→    // Returns cumulative distinct device count (persistent across deploys)
+   375→    if (op === 'stats') {
+   376→      // If blob hasn't loaded yet, try a synchronous read
+   377→      if (!blobLoaded) {
+   378→        await readCumulative();
+   379→      }
+   380→      // Also write pending stats
+   381→      if (blobWritesPending > 0 && blobLoaded) {
+   382→        blobWritesPending = 0;
+   383→        writeCumulative();
+   384→      }
+   385→      return new Response(JSON.stringify({
+   386→        devices: Object.keys(cumulative.devices || {}).length,
+   387→        ips: Object.keys(cumulative.ips || {}).length,
+   388→        visits: cumulative.totalVisits || 0
+   389→      }), {
+   390→        status: 200,
+   391→        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+   392→      });
+   393→    }
+   394→
+   395→    // op=devices — admin endpoint, returns full unique device + IP maps
+   396→    // across ALL history (not just 72h). Shows which specific devices/IPs
+   397→    // visited and how many times. Cumulative stats persist via Netlify Blobs.
+   398→    if (op === 'devices') {
+   399→      const pwd = url.searchParams.get('password') || url.searchParams.get('pwd') || '';
+   400→      if (pwd !== ADMIN_PASSWORD) {
+   401→        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+   402→          status: 403,
+   403→          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+   404→        });
+   405→      }
+   406→      // Ensure cumulative is loaded from blob
+   407→      if (!blobLoaded) {
+   408→        await readCumulative();
+   409→      }
+   410→      // Write pending stats
+   411→      if (blobWritesPending > 0 && blobLoaded) {
+   412→        blobWritesPending = 0;
+   413→        writeCumulative();
+   414→      }
+   415→      // Build device list sorted by visit count descending
+   416→      const deviceList = Object.entries(cumulative.devices || {})
+   417→        .map(([device, count]) => ({ device, visits: count }))
+   418→        .sort((a, b) => b.visits - a.visits);
+   419→      // Build IP list sorted by visit count (mask last octet for privacy)
+   420→      const ipList = Object.entries(cumulative.ips || {})
+   421→        .map(([ip, count]) => ({
+   422→          ip: ip.replace(/(\d+\.\d+\.\d+)\.\d+/, '$1.xxx'),
+   423→          visits: count
+   424→        }))
+   425→        .sort((a, b) => b.visits - a.visits);
+   426→      return new Response(JSON.stringify({
+   427→        totalVisits: cumulative.totalVisits || 0,
+   428→        distinctDevices: deviceList.length,
+   429→        distinctIPs: ipList.length,
+   430→        devices: deviceList,
+   431→        ips: ipList,
+   432→        capturedAt: new Date().toISOString()
+   433→      }), {
+   434→        status: 200,
+   435→        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+   436→      });
+   437→    }
+   438→
+   439→    // op=visits — admin endpoint, requires password
+   440→    if (op === 'visits') {
+   441→      const pwd = url.searchParams.get('password') || url.searchParams.get('pwd') || '';
+   442→      if (pwd !== ADMIN_PASSWORD) {
+   443→        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+   444→          status: 403,
+   445→          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+   446→        });
+   447→      }
+   448→      // Write pending stats on admin poll
+   449→      if (blobWritesPending > 0 && blobLoaded) {
+   450→        blobWritesPending = 0;
+   451→        writeCumulative();
+   452→      }
+   453→      // Also flush any pending visit log entries to the blob
+   454→      if (visitBlobWritesPending > 0) {
+   455→        visitBlobWritesPending = 0;
+   456→        await writeVisitLogBlob(visitLog.slice(-10));
+   457→      }
+   458→      // Read persistent visits from blob (survives edge restarts, 72h retention)
+   459→      const blobVisits = await readVisitLogBlob();
+   460→      // Merge blob visits with in-memory visits (current instance, not yet flushed)
+   461→      const merged = [...blobVisits, ...visitLog];
+   462→      // Deduplicate by ts + ip
+   463→      const seen = new Set();
+   464→      const deduped = merged.filter(v => {
+   465→        const key = v.ts + '|' + v.ip;
+   466→        if (seen.has(key)) return false;
+   467→        seen.add(key);
+   468→        return true;
+   469→      });
+   470→      // Filter by 72-hour retention
+   471→      const cutoff = Date.now() - VISIT_RETENTION_MS;
+   472→      const recent72h = deduped.filter(v => new Date(v.ts).getTime() > cutoff);
+   473→      // Sort newest first
+   474→      recent72h.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+   475→      return new Response(JSON.stringify({
+   476→        count: recent72h.length,
+   477→        visits: recent72h,
+   478→        retentionHours: 72,
+   479→        source: visitStore ? 'netlify:blobs (persistent)' : 'in-memory (per-instance)',
+   480→        cumulative: {
+   481→          totalVisits: cumulative.totalVisits || 0,
+   482→          distinctIPs: Object.keys(cumulative.ips || {}).length,
+   483→          distinctDevices: Object.keys(cumulative.devices || {}).length,
+   484→          // Return the full maps so the client can render an all-history table
+   485→          ipCounts: cumulative.ips || {},
+   486→          deviceCounts: cumulative.devices || {}
+   487→        },
+   488→        edge: context.geo?.country?.name || 'unknown',
+   489→        capturedAt: new Date().toISOString()
+   490→      }), {
+   491→        status: 200,
+   492→        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+   493→      });
+   494→    }
+   495→
+   496→    // op=models → list Groq models (existing)
+   497→    if (op === 'models') {
+   498→      const GROQ_KEY = Deno.env.get('GROQ_API_KEY') || Deno.env.get('GROQ_KEY');
+   499→      if (!GROQ_KEY) {
+   500→        return new Response(
+   501→          JSON.stringify({ error: 'GROQ_API_KEY env var not set on the edge function' }),
+   502→          { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } }
+   503→        );
+   504→      }
+   505→      try {
+   506→        const res = await fetch('https://api.groq.com/openai/v1/models', {
+   507→          headers: { 'Authorization': 'Bearer ' + GROQ_KEY }
+   508→        });
+   509→        const body = await res.text();
+   510→        return new Response(body, {
+   511→          status: res.status,
+   512→          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+   513→        });
+   514→      } catch (e) {
+   515→        return new Response(
+   516→          JSON.stringify({ error: 'Failed to reach Groq', detail: e.message }),
+   517→          { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } }
+   518→        );
+   519→      }
+   520→    }
+   521→
+   522→    // Health check
+   523→    return new Response(JSON.stringify({ ok: true, service: 'groq-proxy', cache: 'memory' }), {
+   524→      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+   525→    });
+   526→  }
+   527→
+   528→  // For POST requests, check GROQ_KEY
+   529→  const GROQ_KEY = Deno.env.get('GROQ_API_KEY') || Deno.env.get('GROQ_KEY');
+   530→  if (!GROQ_KEY) {
+   531→    return new Response(
+   532→      JSON.stringify({ error: 'GROQ_API_KEY env var not set on the edge function' }),
+   533→      { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } }
+   534→    );
+   535→  }
+   536→
+   537→  let body;
+   538→  try {
+   539→    body = await request.json();
+   540→  } catch (e) {
+   541→    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+   542→      status: 400,
+   543→      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+   544→    });
+   545→  }
+   546→
+   547→  if (!Array.isArray(body.messages) || body.messages.length === 0) {
+   548→    return new Response(JSON.stringify({ error: 'messages[] required' }), {
+   549→      status: 400,
+   550→      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+   551→    });
+   552→  }
+   553→
+   554→  const requestedModel = body.model || DEFAULT_MODEL;
+   555→  const isStreaming = body.stream ?? true;
+   556→  const maxTokens = body.max_tokens ?? 800;
+   557→  const isVerifyPing = maxTokens <= VERIFY_MAX_TOKENS;
+   558→
+   559→  // ─── CACHE CHECK (skip for verify pings) ─────────────────────────────────
+   560→  if (!isVerifyPing) {
+   561→    const cacheKey = 'chat:' + await sha256(JSON.stringify({
+   562→      model: requestedModel,
+   563→      messages: body.messages,
+   564→      temperature: body.temperature ?? 0.3,
+   565→      max_tokens: maxTokens,
+   566→      stream: isStreaming
+   567→    }));
+   568→    const cached = memCache.get(cacheKey);
+   569→    if (cached && (Date.now() - cached.ts < CACHE_TTL_MS)) {
+   570→      // Cache hit! Stream the cached text back as simulated SSE
+   571→      if (isStreaming) {
+   572→        return new Response(simulatedSSEStream(cached.text, requestedModel), {
+   573→          status: 200,
+   574→          headers: {
+   575→            'Content-Type': 'text/event-stream',
+   576→            'Cache-Control': 'no-cache',
+   577→            'Connection': 'keep-alive',
+   578→            'X-Cache': 'HIT',
+   579→            ...corsHeaders(origin)
+   580→          }
+   581→        });
+   582→      }
+   583→      // Non-streaming cache hit
+   584→      const openaiResponse = {
+   585→        id: 'cache-' + cached.ts,
+   586→        object: 'chat.completion',
+   587→        created: Math.floor(cached.ts / 1000),
+   588→        model: requestedModel,
+   589→        choices: [{
+   590→          index: 0,
+   591→          message: { role: 'assistant', content: cached.text },
+   592→          finish_reason: 'stop'
+   593→        }],
+   594→        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+   595→      };
+   596→      return new Response(JSON.stringify(openaiResponse), {
+   597→        status: 200,
+   598→        headers: {
+   599→          'Content-Type': 'application/json',
+   600→          'X-Cache': 'HIT',
+   601→          ...corsHeaders(origin)
+   602→        }
+   603→      });
+   604→    }
+   605→  }
+   606→
+   607→  // ─── CACHE MISS — call Groq ──────────────────────────────────────────────
+   608→  let groqRes;
+   609→  try {
+   610→    groqRes = await fetch(GROQ_URL, {
+   611→      method: 'POST',
+   612→      headers: {
+   613→        'Authorization': 'Bearer ' + GROQ_KEY,
+   614→        'Content-Type': 'application/json'
+   615→      },
+   616→      body: JSON.stringify({
+   617→        model: requestedModel,
+   618→        messages: body.messages,
+   619→        temperature: body.temperature ?? 0.3,
+   620→        max_tokens: maxTokens,
+   621→        stream: isStreaming
+   622→      })
+   623→    });
+   624→  } catch (e) {
+   625→    return new Response(
+   626→      JSON.stringify({ error: 'Failed to reach Groq', detail: e.message }),
+   627→      { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } }
+   628→    );
+   629→  }
+   630→
+   631→  if (!groqRes.ok) {
+   632→    const errBody = await groqRes.text();
+   633→    return new Response(errBody, {
+   634→      status: groqRes.status,
+   635→      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+   636→    });
+   637→  }
+   638→
+   639→  // ─── STREAMING: stream to client AND collect for caching ────────────────
+   640→  if (isStreaming) {
+   641→    const groqReader = groqRes.body.getReader();
+   642→    const decoder = new TextDecoder();
+   643→    let buffer = '';
+   644→    let fullText = '';
+   645→
+   646→    const transformedStream = new ReadableStream({
+   647→      async start(controller) {
+   648→        const encoder = new TextEncoder();
+   649→        try {
+   650→          while (true) {
+   651→            const { done, value } = await groqReader.read();
+   652→            if (done) break;
+   653→            const chunk = decoder.decode(value, { stream: true });
+   654→            buffer += chunk;
+   655→            controller.enqueue(encoder.encode(chunk));
+   656→            const lines = buffer.split('\n');
+   657→            buffer = lines.pop() || '';
+   658→            for (const line of lines) {
+   659→              const trimmed = line.trim();
+   660→              if (!trimmed.startsWith('data:')) continue;
+   661→              const data = trimmed.slice(5).trim();
+   662→              if (data === '[DONE]') continue;
+   663→              try {
+   664→                const evt = JSON.parse(data);
+   665→                const delta = evt.choices?.[0]?.delta?.content || '';
+   666→                if (delta) fullText += delta;
+   667→              } catch (_) {}
+   668→            }
+   669→          }
+   670→          if (buffer) controller.enqueue(encoder.encode(buffer));
+   671→        } finally {
+   672→          controller.close();
+   673→          // Store in memory cache for next time
+   674→          if (!isVerifyPing && fullText.length > 20) {
+   675→            const cacheKey = 'chat:' + await sha256(JSON.stringify({
+   676→              model: requestedModel,
+   677→              messages: body.messages,
+   678→              temperature: body.temperature ?? 0.3,
+   679→              max_tokens: maxTokens,
+   680→              stream: isStreaming
+   681→            }));
+   682→            memCache.set(cacheKey, { ts: Date.now(), text: fullText });
+   683→            // Garbage-collect old entries (keep cache under 100 entries)
+   684→            if (memCache.size > 100) {
+   685→              const oldest = [...memCache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0];
+   686→              if (oldest) memCache.delete(oldest[0]);
+   687→            }
+   688→          }
+   689→        }
+   690→      }
+   691→    });
+   692→
+   693→    return new Response(transformedStream, {
+   694→      status: 200,
+   695→      headers: {
+   696→        'Content-Type': 'text/event-stream',
+   697→        'Cache-Control': 'no-cache',
+   698→        'Connection': 'keep-alive',
+   699→        'X-Cache': 'MISS',
+   700→        ...corsHeaders(origin)
+   701→      }
+   702→    });
+   703→  }
+   704→
+   705→  // ─── NON-STREAMING: parse, cache, return ────────────────────────────────
+   706→  const groqJson = await groqRes.json();
+   707→  if (!isVerifyPing) {
+   708→    const text = groqJson.choices?.[0]?.message?.content || '';
+   709→    if (text.length > 20) {
+   710→      const cacheKey = 'chat:' + await sha256(JSON.stringify({
+   711→        model: requestedModel,
+   712→        messages: body.messages,
+   713→        temperature: body.temperature ?? 0.3,
+   714→        max_tokens: maxTokens,
+   715→        stream: isStreaming
+   716→      }));
+   717→      memCache.set(cacheKey, { ts: Date.now(), text });
+   718→      if (memCache.size > 100) {
+   719→        const oldest = [...memCache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0];
+   720→        if (oldest) memCache.delete(oldest[0]);
+   721→      }
+   722→    }
+   723→  }
+   724→  return new Response(JSON.stringify(groqJson), {
+   725→    status: groqRes.status,
+   726→    headers: {
+   727→      'Content-Type': 'application/json',
+   728→      'X-Cache': 'MISS',
+   729→      ...corsHeaders(origin)
+   730→    }
+   731→  });
+   732→};
+   733→
+   734→export const config = {
+   735→  path: '/groq-proxy'
+   736→};
+   737→
