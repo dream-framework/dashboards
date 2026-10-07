@@ -341,12 +341,14 @@ export default async (request, context) => {
   const origin = request.headers.get('origin') || '';
 
   // ─── Log every visit (IP, geo, UA, timestamp) ──────────────────────────
-  // Skip logging for the admin polling endpoint (op=visits) — otherwise the
-  // 5-second auto-poll creates a self-referential loop where every poll
-  // logs itself as a "visit". Also skip op=models (admin/debugging endpoint).
+  // Skip logging for polling/admin endpoints — otherwise the 5-second
+  // auto-poll (op=visits, op=devices) and the footer pill (op=stats)
+  // create self-referential loops where every poll logs itself as a
+  // "visit", inflating the count with heartbeats. Only op=beacon (real
+  // page load) and chat completion POST calls (AI usage) are logged.
   const _url = new URL(request.url);
   const _op = _url.searchParams.get('op');
-  if (_op !== 'visits' && _op !== 'models') {
+  if (_op !== 'visits' && _op !== 'models' && _op !== 'stats' && _op !== 'devices') {
     logVisit(request, context);
   }
 
