@@ -142,7 +142,10 @@ var blobWritesPending = 0;
 // reconciliation pass that runs in readCumulative() so old inflated
 // counts get corrected automatically on the next deploy.
 const EXCLUDED_IPS = new Set([
-  '70.54.144.197'   // owner — do not self-count
+  '70.54.144.197',    // owner — do not self-count
+  '216.16.231.122',   // owner's secondary IP — do not self-count
+  '8.8.8.8',          // test artifact (Google DNS — used in HTTP header injection tests)
+  '9.9.9.9'           // test artifact (Quad9 DNS — used in HTTP header injection tests)
 ]);
 
 function logVisit(request, context) {
@@ -386,10 +389,17 @@ export default async (request, context) => {
   // auto-poll (op=visits, op=devices) and the footer pill (op=stats)
   // create self-referential loops where every poll logs itself as a
   // "visit", inflating the count with heartbeats. Only op=beacon (real
-  // page load) and chat completion POST calls (AI usage) are logged.
+  // page load via GET image ping) is logged as a visit. POST chat
+  // completion requests (verify pings with max_tokens=1 AND real chat
+  // messages) are ALSO skipped — they're API calls, not page views.
+  // Previously every page load fired BOTH a beacon AND an assistant.js
+  // verify POST, double-counting each visit; plus every chat message
+  // inflated the count further. POSTs are now excluded from visit
+  // logging entirely.
   const _url = new URL(request.url);
   const _op = _url.searchParams.get('op');
-  if (_op !== 'visits' && _op !== 'models' && _op !== 'stats' && _op !== 'devices') {
+  const _isPost = request.method === 'POST';
+  if (!_isPost && _op !== 'visits' && _op !== 'models' && _op !== 'stats' && _op !== 'devices') {
     logVisit(request, context);
   }
 
