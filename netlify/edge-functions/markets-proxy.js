@@ -18,6 +18,13 @@
 //  Cache: 60 seconds (in-memory, per-edge-instance). Yahoo data is delayed
 //  10-15 min anyway, so 60s cache is plenty.
 //
+//  ⚠️ changePct comes from Yahoo's own regularMarketChangePercent field,
+//  NOT computed by us — Yahoo calculates it against the previous regular
+//  session close (yesterday). Computing it ourselves from chartPreviousClose
+//  gives the 30-day cumulative change (since chartPreviousClose is the
+//  close ~31 days ago for a range=1mo chart), which made every delta on
+//  the dashboard look misleadingly green/red. See fetchYahooQuote().
+//
 //  Allowed origins: insight-analytics.ca, insightanalyticsca.github.io,
 //  localhost for dev.
 // ════════════════════════════════════════════════════════════════════════════
@@ -71,18 +78,39 @@ async function fetchYahooQuote(symbol) {
     const meta = result?.meta;
     if (!meta) return null;
     const price = meta.regularMarketPrice;
-    const prev = meta.chartPreviousClose || meta.previousClose;
+    // ⚠️ chartPreviousClose for a range=1mo chart is the close ~31 days
+    // ago (the close BEFORE the first candle in the chart), NOT yesterday's
+    // close. previousClose is yesterday's regular close — but Yahoo returns
+    // null for futures and indices, so we can't rely on it. Yahoo pre-
+    // calculates the correct daily change in regularMarketChangePercent
+    // (vs previous regular session close) — prefer this whenever available.
+    // The old code computed changePct itself using chartPreviousClose,
+    // which made the dashboard show the 30-day cumulative change as today's
+    // daily change (everything looked misleadingly green/red).
+    const prev = meta.previousClose || meta.chartPreviousClose;
     if (!price || !prev) return null;
     // Extract 30-day historical closes + volumes for the trend chart.
     // Yahoo returns timestamps + indicators.quote[0].{close,volume} arrays.
     const closes = result?.indicators?.quote?.[0]?.close || [];
     const volumes = result?.indicators?.quote?.[0]?.volume || [];
     const timestamps = result?.timestamp || [];
+    // Prefer Yahoo's own pre-calculated daily change (correct: vs previous
+    // regular session close, not the 30-day-ago close). The fallback below
+    // only triggers for the rare symbol where Yahoo doesn't expose
+    // regularMarketChangePercent — note the fallback uses chartPreviousClose
+    // (the 30-day-ago baseline), which is the best we can do without a
+    // separate fetch.
+    const changePct = (typeof meta.regularMarketChangePercent === 'number')
+      ? meta.regularMarketChangePercent
+      : ((price - prev) / prev * 100);
+    const change = (typeof meta.regularMarketChange === 'number')
+      ? meta.regularMarketChange
+      : (price - prev);
     return {
       symbol: symbol,
       price: price,
-      change: price - prev,
-      changePct: ((price - prev) / prev * 100),
+      change: change,
+      changePct: changePct,
       currency: meta.currency || 'USD',
       exchange: meta.exchangeName || '',
       lastTradeTime: meta.regularMarketTime || null,
