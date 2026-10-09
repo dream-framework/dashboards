@@ -1,0 +1,74 @@
+[
+  {
+    "url": "https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/how-credits-work",
+    "name": "How credits work | Netlify Docs",
+    "snippet": "Monthly plan credits are included with your plan each billing cycle. ... While your monthly credits reset after each month, other credits ...",
+    "host_name": "docs.netlify.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.netlify.com/pricing",
+    "name": "Pricing and Plans - Netlify",
+    "snippet": "When a site reaches its monthly usage limits, it enters a paused state until the start of the next billing cycle. We'll notify you by email and in-app as ... Missing:  minutes  | Show results with:",
+    "host_name": "www.netlify.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://docs.netlify.com/build/data-and-storage/netlify-database/billing-and-usage",
+    "name": "Billing, limits, and compliance | Netlify Docs",
+    "snippet": "Netlify Database has limits based on your Credit-based pricing plan. The limits below are designed to be fair and protect you from unintended ... Missing:  date  monthly",
+    "host_name": "docs.netlify.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://answers.netlify.com/t/understanding-build-minute-charges-do-they-reset-every-month/46694",
+    "name": "Understanding build minute charges - do they reset every month?",
+    "snippet": "The counter resets every month back to 0. The month is not same as calendar month, it's your billing month. Missing:  date  | Show results with:",
+    "host_name": "answers.netlify.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://hostim.dev/blog/netlify-credit-pricing",
+    "name": "Netlify Credits Explained: How They Work and  - Hostim.dev",
+    "snippet": "Monthly plan credits reset at the start of each billing cycle. The cycle starts on the day your team account was created, so the reset date is ...",
+    "host_name": "hostim.dev",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://answers.netlify.com/t/does-the-free-plan-reset-automatically/34368",
+    "name": "Does the free plan reset automatically? - Netlify Support Forums",
+    "snippet": "The offer says that the free plan includes 100gb a month of bandwidth and 300 minutes of build. My free plan has not been reset since January. Missing:  date  | Show results with:",
+    "host_name": "answers.netlify.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://netli.fyi/blog/netlify-free-plan-limits-2026",
+    "name": "Netlify Free Plan Limits (2026): 300 Credits = ~15 GB or 20",
+    "snippet": "Netlify's free plan is 300 credits/month, hard limit: ~15 GB bandwidth or ~20 deploys. When credits run out, your sites pause. Missing:  date  | Show results with:",
+    "host_name": "netli.fyi",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/billing-faq-for-credit-based-plans",
+    "name": "Billing FAQ for Credit-based pricing plans | Netlify Docs",
+    "snippet": "Your monthly credit balance resets at the start of each billing cycle, and any remaining credits do not roll over unless you have a Pro plan with 5,000 ...",
+    "host_name": "docs.netlify.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  }
+]
