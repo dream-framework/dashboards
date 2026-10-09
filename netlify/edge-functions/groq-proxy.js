@@ -148,7 +148,7 @@ const EXCLUDED_IPS = new Set([
   '9.9.9.9'           // test artifact (Quad9 DNS — used in HTTP header injection tests)
 ]);
 
-function logVisit(request, context) {
+async function logVisit(request, context) {
   const headers = request.headers;
   const geo = context.geo || {};
   var referrer = headers.get('referer') || headers.get('referrer') || 'direct';
@@ -229,12 +229,18 @@ function logVisit(request, context) {
   cumulative.sites[site].devices[device] = (cumulative.sites[site].devices[device] || 0) + 1;
   blobWritesPending++;
 
-  // Write to Blob every 5 visits (reduces API calls)
+  // Write to Blob on EVERY visit AND await the write (was fire-and-forget
+  // every 5 visits — caused edge-instance state divergence: beacons hit
+  // instance A and returned immediately, but the blob write was still
+  // in-flight when op=visits/devices hit instance B and read the blob.
+  // Result: the admin panel showed stale cumulative data. Now we wait
+  // for the write to complete before returning, so any subsequent read
+  // (on any instance) sees the fresh data.
   // Guard: don't write until the initial read has completed — otherwise
-  // we overwrite the persistent blob with empty stats on every deploy
-  if (blobWritesPending >= 5 && blobLoaded) {
+  // we overwrite the persistent blob with empty stats on every deploy.
+  if (blobLoaded) {
     blobWritesPending = 0;
-    writeCumulative();
+    await writeCumulative();  // SYNCHRONOUS write — beacon waits for blob persistence
   }
 
   // Also flush the visit log to the persistent blob every 5 visits
@@ -432,7 +438,7 @@ export default async (request, context) => {
   const _op = _url.searchParams.get('op');
   const _isPost = request.method === 'POST';
   if (!_isPost && _op !== 'visits' && _op !== 'models' && _op !== 'stats' && _op !== 'devices') {
-    logVisit(request, context);
+    await logVisit(request, context);
   }
 
   if (request.method === 'OPTIONS') {
@@ -507,15 +513,22 @@ export default async (request, context) => {
         });
       }
       const siteFilter = url.searchParams.get('site');  // 'main' | 'dashboards' | null (combined)
-      // Ensure cumulative is loaded from blob
-      if (!blobLoaded) {
-        await readCumulative();
-      }
-      // Write pending stats
+      // ─── ALWAYS read fresh from blob (not just on cold start) ─────────
+      // The previous `if (!blobLoaded)` guard meant that once an edge
+      // instance had loaded the blob on its first request, it would NEVER
+      // re-read — so beacons that hit OTHER instances (and got persisted to
+      // the blob by those instances) were invisible to this instance.
+      // Result: the admin panel showed stale data because it was reading
+      // from in-memory state that was hours/days old.
+      //
+      // Now we always flush pending in-memory writes to the blob FIRST
+      // (so we don't lose this instance's recent visits), then re-read
+      // the blob (so we pick up visits from other instances).
       if (blobWritesPending > 0 && blobLoaded) {
         blobWritesPending = 0;
-        writeCumulative();
+        await writeCumulative();  // await so the read sees the fresh write
       }
+      await readCumulative();  // always pick up the latest blob state
       // Pick the right stats bucket: combined (default) or per-site.
       var bucket = cumulative;
       var bucketLabel = 'combined';
@@ -559,11 +572,16 @@ export default async (request, context) => {
           headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
         });
       }
-      // Write pending stats on admin poll
+      // ─── ALWAYS flush pending writes + read fresh from blob ───────────
+      // Same fix as op=devices: beacons hit other edge instances and
+      // persist to blob there. Without re-reading the blob here, this
+      // instance would return stale cumulative data from its in-memory
+      // state (which was loaded on cold start and never refreshed).
       if (blobWritesPending > 0 && blobLoaded) {
         blobWritesPending = 0;
-        writeCumulative();
+        await writeCumulative();
       }
+      await readCumulative();  // always pick up the latest blob state
       // Also flush any pending visit log entries to the blob
       if (visitBlobWritesPending > 0) {
         visitBlobWritesPending = 0;
