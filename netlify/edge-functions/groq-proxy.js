@@ -200,6 +200,15 @@ async function logVisit(request, context) {
   }
 
   var ua = headers.get('user-agent') || 'unknown';
+
+  // ─── Skip bots (curl, Googlebot, headless browsers, scrapers, etc.) ──
+  // Bots don't count as visits — return early so neither the visit log
+  // nor cumulative stats see them. This keeps the activity panel clean
+  // of test pings, SEO crawlers, and scraping tools.
+  if (isBotUA(ua)) {
+    return null;
+  }
+
   var device = parseDeviceUA(ua);
   var country = geo.country?.name || geo.country || 'unknown';
   var city = geo.city?.name || geo.city || 'unknown';
@@ -273,6 +282,56 @@ function parseDeviceUA(ua) {
   return browser + ' · ' + os;
 }
 
+// ─── Bot detection ───────────────────────────────────────────────────────
+// Returns true if the user-agent looks like a bot/crawler/scraper. Bots
+// are skipped entirely in logVisit() — they don't count as visits, don't
+// appear in the cumulative stats, and don't show up in the activity panel.
+// Detects:
+//   - CLI HTTP tools: curl, wget, python-requests, scrapy, httpx, got,
+//     axios (sometimes), node-fetch
+//   - Search engine crawlers: Googlebot, Bingbot, Slurp (Yahoo),
+//     DuckDuckBot, Baiduspider, YandexBot, AhrefsBot, SemrushBot
+//   - Headless browsers: HeadlessChrome, PhantomJS, puppeteer,
+//     playwright, selenium
+//   - Generic: any UA containing 'bot', 'crawl', 'spider', 'scrape'
+function isBotUA(ua) {
+  if (!ua || ua === 'unknown') return false;
+  var lower = ua.toLowerCase();
+  // CLI HTTP tools
+  if (lower.indexOf('curl') >= 0) return true;
+  if (lower.indexOf('wget') >= 0) return true;
+  if (lower.indexOf('python') >= 0) return true;  // python-requests, urllib
+  if (lower.indexOf('scrapy') >= 0) return true;
+  if (lower.indexOf('httpx') >= 0) return true;
+  if (lower.indexOf('node-fetch') >= 0) return true;
+  if (lower.indexOf('axios') >= 0) return true;
+  if (lower.indexOf('got/') >= 0) return true;
+  // Search engine crawlers
+  if (lower.indexOf('googlebot') >= 0) return true;
+  if (lower.indexOf('bingbot') >= 0) return true;
+  if (lower.indexOf('slurp') >= 0) return true;  // Yahoo
+  if (lower.indexOf('duckduckbot') >= 0) return true;
+  if (lower.indexOf('baiduspider') >= 0) return true;
+  if (lower.indexOf('yandexbot') >= 0) return true;
+  if (lower.indexOf('ahrefsbot') >= 0) return true;
+  if (lower.indexOf('semrushbot') >= 0) return true;
+  if (lower.indexOf('facebookexternalhit') >= 0) return true;
+  if (lower.indexOf('twitterbot') >= 0) return true;
+  if (lower.indexOf('linkedinbot') >= 0) return true;
+  // Headless browsers
+  if (lower.indexOf('headlesschrome') >= 0) return true;
+  if (lower.indexOf('phantomjs') >= 0) return true;
+  if (lower.indexOf('puppeteer') >= 0) return true;
+  if (lower.indexOf('playwright') >= 0) return true;
+  if (lower.indexOf('selenium') >= 0) return true;
+  // Generic bot/crawl/spider/scrape keywords
+  if (lower.indexOf('bot') >= 0) return true;
+  if (lower.indexOf('crawl') >= 0) return true;
+  if (lower.indexOf('spider') >= 0) return true;
+  if (lower.indexOf('scrape') >= 0) return true;
+  return false;
+}
+
 // ─── Netlify Blobs REST API (two-step: API → pre-signed S3 URL) ───────────
 async function readCumulative() {
   var siteId = Deno.env.get('NETLIFY_SITE_ID');
@@ -328,6 +387,36 @@ async function readCumulative() {
                 main: { totalVisits: 0, ips: {}, devices: {} },
                 dashboards: { totalVisits: 0, ips: {}, devices: {} }
               };
+              blobWritesPending = 0;
+              writeCumulative();
+            }
+            // ─── One-time reconciliation: remove bot visits from the
+            // cumulative blob. Bots (curl, Googlebot, headless browsers,
+            // scrapers) are now skipped in logVisit(), but old bot visits
+            // are still baked into the blob from before this fix shipped.
+            // Sweep all device entries that start with "Bot" (covers
+            // "Bot · Other", "Bot · Linux", etc.), subtract their counts
+            // from totalVisits, and delete them from the devices map.
+            // Also sweep the per-site buckets. Persist corrected counts
+            // immediately so we don't re-subtract on the next cold start.
+            var botCorrected = false;
+            function sweepBots(bucket) {
+              if (!bucket || !bucket.devices) return;
+              Object.keys(bucket.devices).forEach(function(dev) {
+                if (dev.indexOf('Bot') === 0) {
+                  var stale = bucket.devices[dev];
+                  bucket.totalVisits = Math.max(0, bucket.totalVisits - stale);
+                  delete bucket.devices[dev];
+                  botCorrected = true;
+                }
+              });
+            }
+            sweepBots(cumulative);
+            if (cumulative.sites) {
+              sweepBots(cumulative.sites.main);
+              sweepBots(cumulative.sites.dashboards);
+            }
+            if (botCorrected) {
               blobWritesPending = 0;
               writeCumulative();
             }
@@ -537,8 +626,11 @@ export default async (request, context) => {
         bucket = sites[siteFilter] || { totalVisits: 0, ips: {}, devices: {} };
         bucketLabel = siteFilter;
       }
-      // Build device list sorted by visit count descending
+      // Build device list sorted by visit count descending.
+      // Filter out "Bot · *" entries — bots are skipped in logVisit()
+      // going forward, but old bot visits may still be in the blob.
       const deviceList = Object.entries(bucket.devices || {})
+        .filter(([device]) => device.indexOf('Bot') !== 0)
         .map(([device, count]) => ({ device, visits: count }))
         .sort((a, b) => b.visits - a.visits);
       // Build IP list sorted by visit count (mask last octet for privacy).
@@ -620,6 +712,12 @@ export default async (request, context) => {
           return s === siteFilter;
         });
       }
+      // ─── Filter out bots from the 72h detail view too — the owner
+      // shouldn't see test pings / SEO crawlers / scrapers in the recent
+      // visitors table. Bots are detected by the UA string via isBotUA().
+      filteredBySite = filteredBySite.filter(function(v) {
+        return !isBotUA(v.ua || '');
+      });
       // Sort newest first
       filteredBySite.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
       // Site label for the response (so the UI can confirm which filter is active)
