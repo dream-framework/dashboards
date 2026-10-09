@@ -606,6 +606,18 @@ export default async (request, context) => {
       filteredBySite.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
       // Site label for the response (so the UI can confirm which filter is active)
       const siteLabel = siteFilter || 'combined';
+      // ─── Cumulative (all-time) stats. When a site filter is active
+      // (&site=main | &site=dashboards), return the per-site cumulative
+      // breakdown from cumulative.sites[siteFilter] instead of the
+      // combined counters. Otherwise the all-time device/IP tables at
+      // the bottom of the activity panel would show IDENTICAL data on
+      // every tab (combined), making the user think "all tabs show the
+      // same info". With per-site cumulative, the all-time tables
+      // actually change when the user switches tabs.
+      var cumSource = cumulative;
+      if ((siteFilter === 'main' || siteFilter === 'dashboards') && cumulative.sites && cumulative.sites[siteFilter]) {
+        cumSource = cumulative.sites[siteFilter];
+      }
       return new Response(JSON.stringify({
         count: filteredBySite.length,
         visits: filteredBySite,
@@ -613,12 +625,12 @@ export default async (request, context) => {
         retentionHours: 72,
         source: visitStore ? 'netlify:blobs (persistent)' : 'in-memory (per-instance)',
         cumulative: {
-          totalVisits: cumulative.totalVisits || 0,
-          distinctIPs: Object.keys(cumulative.ips || {}).length,
-          distinctDevices: Object.keys(cumulative.devices || {}).length,
+          totalVisits: cumSource.totalVisits || 0,
+          distinctIPs: Object.keys(cumSource.ips || {}).length,
+          distinctDevices: Object.keys(cumSource.devices || {}).length,
           // Return the full maps so the client can render an all-history table
-          ipCounts: cumulative.ips || {},
-          deviceCounts: cumulative.devices || {}
+          ipCounts: cumSource.ips || {},
+          deviceCounts: cumSource.devices || {}
         },
         edge: context.geo?.country?.name || 'unknown',
         capturedAt: new Date().toISOString()
