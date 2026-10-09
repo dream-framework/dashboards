@@ -24,8 +24,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="./css/styles.css?v=20261008">
-  <link rel="stylesheet" href="./css/theme-vivid.css?v=20261008">
+  <link rel="stylesheet" href="./css/styles.css?v=20261009">
+  <link rel="stylesheet" href="./css/theme-vivid.css?v=20261009">
 </head>
 <body>
 
@@ -291,9 +291,9 @@
 <!-- ════════════════════════ SCRIPTS ════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/echarts-liquidfill@3/dist/echarts-liquidfill.min.js"></script>
-<script src="./js/api.js?v=20261008"></script>
-<script src="./js/charts.js?v=20261008"></script>
-<script src="./js/app.js?v=20261008"></script>
+<script src="./js/api.js?v=20261009"></script>
+<script src="./js/charts.js?v=20261009"></script>
+<script src="./js/app.js?v=20261009"></script>
 
 <script>
   // Wire secondary hero CTA + utility buttons
@@ -338,9 +338,9 @@
   });
 </script>
 
-<script src="./js/theme-toggle.js?v=20261008"></script>
+<script src="./js/theme-toggle.js?v=20261009"></script>
 <!-- Pull-to-refresh + service worker -->
-<script src="./js/pull-to-refresh.js?v=20261008"></script>
+<script src="./js/pull-to-refresh.js?v=20261009"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
@@ -383,6 +383,13 @@
     </div>
     <style>@keyframes adminPulse{0%,100%{opacity:0.7;transform:scale(1)}50%{opacity:1;transform:scale(1.3)}}</style>
 
+    <!-- Site selector tab bar — filter the activity panel by site -->
+    <div id="adminTabs" style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--card-border,rgba(0,0,0,0.08));padding-bottom:8px;">
+      <button data-site="combined" class="admin-tab" style="padding:6px 14px;border:0;border-radius:8px;background:linear-gradient(135deg,var(--primary,#6366f1),var(--accent,#06b6d4));color:#fff;font-size:11px;font-weight:600;cursor:pointer;">Combined</button>
+      <button data-site="main" class="admin-tab" style="padding:6px 14px;border:1px solid var(--card-border,rgba(0,0,0,0.15));border-radius:8px;background:transparent;color:var(--text-soft,#64748b);font-size:11px;font-weight:600;cursor:pointer;">Main</button>
+      <button data-site="dashboards" class="admin-tab" style="padding:6px 14px;border:1px solid var(--card-border,rgba(0,0,0,0.15));border-radius:8px;background:transparent;color:var(--text-soft,#64748b);font-size:11px;font-weight:600;cursor:pointer;">Dashboards</button>
+    </div>
+
     <!-- Summary cards -->
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
       <div style="padding:16px 20px;border-radius:12px;border:1px solid rgba(99,102,241,0.15);background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(6,182,212,0.04));">
@@ -407,8 +414,8 @@
 </div>
 
 <script>
-// Beacon: log this visit on page load (includes page path)
-new Image().src = 'https://startling-belekoy-b0ec70.netlify.app/groq-proxy?op=beacon&page=' + encodeURIComponent(window.location.pathname.replace(/^\/dashboards\/?/, '') || 'index.html') + '&cb=' + Date.now();
+// Page-load signal ping (site=dashboards so the activity panel can filter by site)
+new Image().src = 'https://startling-belekoy-b0ec70.netlify.app/groq-proxy?op=beacon&page=' + encodeURIComponent(window.location.pathname.replace(/^\/dashboards\/?/, '') || 'index.html') + '&site=dashboards&cb=' + Date.now();
 
 
 // Footer pill: just the number (cumulative distinct device types — no label, no tooltip)
@@ -474,6 +481,7 @@ function parseDeviceOS(ua) {
   var closeBtn = document.getElementById('adminCloseBtn');
   var pollTimer = null;
   var adminPwd = null;
+  var currentSite = 'combined';  // 'combined' | 'main' | 'dashboards'
 
   gear.addEventListener('mouseenter', function() { gear.style.opacity = '0.6'; });
   gear.addEventListener('mouseleave', function() { gear.style.opacity = '0.3'; });
@@ -489,7 +497,8 @@ function parseDeviceOS(ua) {
   pwdModal.addEventListener('click', function(e) { if (e.target === pwdModal) closePwd(); });
 
   function fetchVisits() {
-    var url = PROXY + '?op=visits&password=' + encodeURIComponent(adminPwd);
+    var siteQs = currentSite !== 'combined' ? '&site=' + currentSite : '';
+    var url = PROXY + '?op=visits&password=' + encodeURIComponent(adminPwd) + siteQs;
     fetch(url, { headers: { 'Origin': 'https://insightanalyticsca.github.io' } })
       .then(function(r) { return r.status === 403 ? null : r.json(); })
       .then(function(data) {
@@ -497,10 +506,8 @@ function parseDeviceOS(ua) {
         renderVisits(data);
       })
       .catch(function() { /* silent retry on next poll */ });
-    // Also fetch the full unique device/IP history from the NEW site
-    // (which has the op=devices endpoint). The old site has 733 visits of
-    // cumulative history but doesn't expose the detail endpoint.
-    var devUrl = PROXY_DEVICES + '?op=devices&password=' + encodeURIComponent(adminPwd);
+    // Also fetch the full unique device/IP history, filtered by the same site
+    var devUrl = PROXY_DEVICES + '?op=devices&password=' + encodeURIComponent(adminPwd) + siteQs;
     fetch(devUrl, { headers: { 'Origin': 'https://insightanalyticsca.github.io' } })
       .then(function(r) { return r.status === 403 ? null : r.json(); })
       .then(function(d) {
@@ -776,6 +783,27 @@ function parseDeviceOS(ua) {
 
   pwdInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') pwdSubmit.click(); });
   closeBtn.addEventListener('click', function() { visitPanel.style.display = 'none'; stopPolling(); });
+
+  // ─── Site tab bar: switch the active site filter + immediately re-fetch ─
+  function setActiveTab(site) {
+    currentSite = site;
+    var tabs = document.querySelectorAll('.admin-tab');
+    tabs.forEach(function(t) {
+      var isActive = t.getAttribute('data-site') === site;
+      t.style.background = isActive ? 'linear-gradient(135deg,var(--primary,#6366f1),var(--accent,#06b6d4))' : 'transparent';
+      t.style.color = isActive ? '#fff' : 'var(--text-soft,#64748b)';
+      t.style.border = isActive ? '0' : '1px solid var(--card-border,rgba(0,0,0,0.15))';
+    });
+    if (adminPwd) fetchVisits();  // immediate refresh with the new filter
+  }
+  var tabContainer = document.getElementById('adminTabs');
+  if (tabContainer) {
+    tabContainer.addEventListener('click', function(e) {
+      var t = e.target.closest('.admin-tab');
+      if (!t) return;
+      setActiveTab(t.getAttribute('data-site'));
+    });
+  }
 })();
 </script>
 </body>

@@ -203,15 +203,30 @@ function logVisit(request, context) {
   var device = parseDeviceUA(ua);
   var country = geo.country?.name || geo.country || 'unknown';
   var city = geo.city?.name || geo.city || 'unknown';
+  // Site: 'main' (insight-analytics.ca) or 'dashboards' (insightanalyticsca.github.io/dashboards).
+  // Read from the ?site= query param; default 'main' for backward compat
+  // with pre-existing beacons that didn't send it (those visits age out
+  // within 72h, after which the per-site breakdown is fully accurate).
+  var site = 'main';
+  try { var _sp = new URL(request.url).searchParams; if (_sp.get('site')) site = _sp.get('site'); } catch(_) {}
+  if (site !== 'main' && site !== 'dashboards') site = 'main';  // sanitize
 
-  const visit = { ts: new Date().toISOString(), ip, country, city, page, method: request.method, ua };
+  const visit = { ts: new Date().toISOString(), ip, country, city, page, method: request.method, ua, site };
   visitLog.push(visit);
   if (visitLog.length > MAX_VISITS) visitLog.shift();
 
-  // Update cumulative stats
+  // Update cumulative stats (combined — existing behavior)
   cumulative.totalVisits++;
   cumulative.ips[ip] = (cumulative.ips[ip] || 0) + 1;
   cumulative.devices[device] = (cumulative.devices[device] || 0) + 1;
+  // Also update per-site breakdown (new). Sites structure is lazily
+  // initialized in readCumulative() — guard here in case the blob
+  // hasn't loaded yet on a cold start.
+  if (!cumulative.sites) cumulative.sites = { main: { totalVisits: 0, ips: {}, devices: {} }, dashboards: { totalVisits: 0, ips: {}, devices: {} } };
+  if (!cumulative.sites[site]) cumulative.sites[site] = { totalVisits: 0, ips: {}, devices: {} };
+  cumulative.sites[site].totalVisits++;
+  cumulative.sites[site].ips[ip] = (cumulative.sites[site].ips[ip] || 0) + 1;
+  cumulative.sites[site].devices[device] = (cumulative.sites[site].devices[device] || 0) + 1;
   blobWritesPending++;
 
   // Write to Blob every 5 visits (reduces API calls)
@@ -292,6 +307,23 @@ async function readCumulative() {
                 blobWritesPending = 0;
                 writeCumulative();
               }
+            }
+            // ─── Lazily init the per-site breakdown structure. The
+            // combined counters (cumulative.totalVisits / ips / devices)
+            // are preserved as-is — only the new `sites` sub-object is
+            // added. New visits from this point onward are recorded in
+            // BOTH the combined view AND the per-site breakdown. Old
+            // visits (from before this deploy) only exist in the combined
+            // view — they'll age out of the 72h visit log, but their
+            // contribution to cumulative.totalVisits stays (it's the
+            // all-time combined count, intentionally inclusive).
+            if (!cumulative.sites) {
+              cumulative.sites = {
+                main: { totalVisits: 0, ips: {}, devices: {} },
+                dashboards: { totalVisits: 0, ips: {}, devices: {} }
+              };
+              blobWritesPending = 0;
+              writeCumulative();
             }
           }
         }
@@ -433,10 +465,28 @@ export default async (request, context) => {
         blobWritesPending = 0;
         writeCumulative();
       }
+      // Per-site breakdown (in addition to the combined view). The footer
+      // pill on each site uses the combined `devices` count by default but
+      // can switch to per-site via the activity panel's tab bar.
+      var sites = cumulative.sites || {};
+      var mainSite = sites.main || { totalVisits: 0, ips: {}, devices: {} };
+      var dashSite = sites.dashboards || { totalVisits: 0, ips: {}, devices: {} };
       return new Response(JSON.stringify({
         devices: Object.keys(cumulative.devices || {}).length,
         ips: Object.keys(cumulative.ips || {}).length,
-        visits: cumulative.totalVisits || 0
+        visits: cumulative.totalVisits || 0,
+        sites: {
+          main: {
+            devices: Object.keys(mainSite.devices || {}).length,
+            ips: Object.keys(mainSite.ips || {}).length,
+            visits: mainSite.totalVisits || 0
+          },
+          dashboards: {
+            devices: Object.keys(dashSite.devices || {}).length,
+            ips: Object.keys(dashSite.ips || {}).length,
+            visits: dashSite.totalVisits || 0
+          }
+        }
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
@@ -446,6 +496,8 @@ export default async (request, context) => {
     // op=devices — admin endpoint, returns full unique device + IP maps
     // across ALL history (not just 72h). Shows which specific devices/IPs
     // visited and how many times. Cumulative stats persist via Netlify Blobs.
+    // Accepts optional &site=main or &site=dashboards to filter to one site
+    // only (default: combined view across both sites).
     if (op === 'devices') {
       const pwd = url.searchParams.get('password') || url.searchParams.get('pwd') || '';
       if (pwd !== ADMIN_PASSWORD) {
@@ -454,6 +506,7 @@ export default async (request, context) => {
           headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
         });
       }
+      const siteFilter = url.searchParams.get('site');  // 'main' | 'dashboards' | null (combined)
       // Ensure cumulative is loaded from blob
       if (!blobLoaded) {
         await readCumulative();
@@ -463,16 +516,20 @@ export default async (request, context) => {
         blobWritesPending = 0;
         writeCumulative();
       }
+      // Pick the right stats bucket: combined (default) or per-site.
+      var bucket = cumulative;
+      var bucketLabel = 'combined';
+      if (siteFilter === 'main' || siteFilter === 'dashboards') {
+        var sites = cumulative.sites || {};
+        bucket = sites[siteFilter] || { totalVisits: 0, ips: {}, devices: {} };
+        bucketLabel = siteFilter;
+      }
       // Build device list sorted by visit count descending
-      const deviceList = Object.entries(cumulative.devices || {})
+      const deviceList = Object.entries(bucket.devices || {})
         .map(([device, count]) => ({ device, visits: count }))
         .sort((a, b) => b.visits - a.visits);
       // Build IP list sorted by visit count (mask last octet for privacy).
-      // Filter out excluded IPs — even after the reconciliation pass in
-      // readCumulative removes them from the blob, this guards against
-      // any in-memory race where the IP was re-added before the blob
-      // write flushed.
-      const ipList = Object.entries(cumulative.ips || {})
+      const ipList = Object.entries(bucket.ips || {})
         .filter(([ip]) => !EXCLUDED_IPS.has(ip))
         .map(([ip, count]) => ({
           ip: ip.replace(/(\d+\.\d+\.\d+)\.\d+/, '$1.xxx'),
@@ -480,7 +537,8 @@ export default async (request, context) => {
         }))
         .sort((a, b) => b.visits - a.visits);
       return new Response(JSON.stringify({
-        totalVisits: cumulative.totalVisits || 0,
+        site: bucketLabel,
+        totalVisits: bucket.totalVisits || 0,
         distinctDevices: deviceList.length,
         distinctIPs: ipList.length,
         devices: deviceList,
@@ -531,11 +589,27 @@ export default async (request, context) => {
       const filtered72h = EXCLUDED_IPS.size > 0
         ? recent72h.filter(v => !EXCLUDED_IPS.has(v.ip))
         : recent72h;
+      // Optional site filter: &site=main or &site=dashboards narrows the
+      // 72h log to visits from that site only. Default (no param) returns
+      // all visits (combined view). For visits logged before this deploy
+      // (no `site` field), treat them as 'main' for backward compat — they
+      // age out within 72h so the per-site breakdown becomes fully accurate.
+      const siteFilter = url.searchParams.get('site');
+      let filteredBySite = filtered72h;
+      if (siteFilter === 'main' || siteFilter === 'dashboards') {
+        filteredBySite = filtered72h.filter(function(v) {
+          var s = v.site || 'main';  // backward compat: old visits → main
+          return s === siteFilter;
+        });
+      }
       // Sort newest first
-      filtered72h.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+      filteredBySite.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+      // Site label for the response (so the UI can confirm which filter is active)
+      const siteLabel = siteFilter || 'combined';
       return new Response(JSON.stringify({
-        count: filtered72h.length,
-        visits: filtered72h,
+        count: filteredBySite.length,
+        visits: filteredBySite,
+        site: siteLabel,
         retentionHours: 72,
         source: visitStore ? 'netlify:blobs (persistent)' : 'in-memory (per-instance)',
         cumulative: {
